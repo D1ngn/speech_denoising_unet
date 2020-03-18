@@ -150,6 +150,9 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
     epoch_val_loss = 0.0
     logs = []
 
+    # 学習済みモデルのパラメータを保存するディレクトリを作成
+    os.makedirs(param_save_dir, exist_ok=True)
+
     # epochごとのループ
     for epoch in range(num_epochs):
 
