@@ -8,7 +8,7 @@ import random
 from tqdm import tqdm
 
 #　音声データをロードし、指定された秒数とサンプリングレートでリサンプル
-def load_audio_file(file_path, length, sampling_rate):
+def load_audio_file(file_path, length, sampling_rate=16000):
     data, sr = librosa.load(file_path, sr=sampling_rate)
     # データが設定値よりも大きい場合は大きさを超えた分をカットする
     # データが設定値よりも小さい場合はデータの後ろを0でパディングする
@@ -19,7 +19,7 @@ def load_audio_file(file_path, length, sampling_rate):
     return data
 
 # 音声データを指定したサンプリングレートで保存
-def save_audio_file(file_path, data, sampling_rate):
+def save_audio_file(file_path, data, sampling_rate=16000):
     librosa.output.write_wav(file_path, data, sampling_rate)
 
 # 2つのオーディオデータを足し合わせる
@@ -30,10 +30,11 @@ def audio_mixer(data1, data2):
 
 # 音声データをスペクトログラムに変換する
 def wav_to_spec(data, fft_size, hop_length):
-    # 短時間フーリエ変換(STFT)を行い、振幅スペクトログラムを取得
-    spec = np.abs(librosa.stft(data, n_fft=fft_size, hop_length=hop_length))
+    # 短時間フーリエ変換(STFT)を行い、スペクトログラムを取得
+    spec = librosa.stft(data, n_fft=fft_size, hop_length=hop_length)
+    mag = np.abs(spec) # 振幅スペクトログラムを取得
     # mel_spec = librosa.feature.melspectrogram(data, sr=sr, n_mels=128) # メルスペクトログラムを用いる場合はこっちを使う
-    return spec
+    return mag
 
 if __name__ == '__main__':
     # 各パラメータを設定

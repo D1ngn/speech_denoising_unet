@@ -224,7 +224,14 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
         # 学習したモデルのパラメータを保存
         if ((epoch+1) % 10 == 0):
             param_save_path = os.path.join(param_save_dir, "ckpt_epoch{}.pt".format(epoch+1))
-            torch.save(net.state_dict(), param_save_path)
+            # torch.save(net.state_dict(), param_save_path) #　推論のみを行う場合
+            # 学習を再開できるように変更
+            torch.save({
+            'epoch': epoch+1,
+            'model_state_dict': net.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'log_epoch': log_epoch
+            }, param_save_path)
 
 
 if __name__ == '__main__':
