@@ -28,13 +28,16 @@ def audio_mixer(data1, data2):
     mixed_audio = data1 + data2
     return mixed_audio
 
+
 # 音声データをスペクトログラムに変換する
 def wav_to_spec(data, fft_size, hop_length):
     # 短時間フーリエ変換(STFT)を行い、スペクトログラムを取得
     spec = librosa.stft(data, n_fft=fft_size, hop_length=hop_length)
     mag = np.abs(spec) # 振幅スペクトログラムを取得
+    phase = np.exp(1.j * np.angle(spec)) # 位相スペクトログラムを取得(フェーザ表示)
     # mel_spec = librosa.feature.melspectrogram(data, sr=sr, n_mels=128) # メルスペクトログラムを用いる場合はこっちを使う
-    return mag
+    return mag, phase
+
 
 if __name__ == '__main__':
     # 各パラメータを設定
@@ -77,13 +80,13 @@ if __name__ == '__main__':
         target_file_name = voice_file_name.split('.')[0] + "_target.npy" # (例)BASIC5000_0001_target.npy
         voice_data = load_audio_file(voice_path, audio_length, sampling_rate)
         # オーディオデータをスペクトログラムに変換
-        voice_spec = wav_to_spec(voice_data, fft_size, hop_length)
+        voice_mag, _ = wav_to_spec(voice_data, fft_size, hop_length)
         # スペクトグラムを正規化
-        max_spec = voice_spec.max()
-        normed_voice_spec = voice_spec / max_spec
+        max_mag = voice_mag.max()
+        normed_voice_mag = voice_mag / max_mag
         # .npy形式でスペクトログラムを保存
         target_file_path = os.path.join(train_data_path, target_file_name)
-        np.save(target_file_path, normed_voice_spec)
+        np.save(target_file_path, normed_voice_mag)
         # 人の発話音声それぞれに対して、複数の環境音を混ぜ合わせて混合音声を作成
         for idx, env_noise_path in enumerate(env_noise_list_for_train):
             noise_idx = str(idx).zfill(3)
@@ -91,12 +94,12 @@ if __name__ == '__main__':
             env_noise_data = load_audio_file(env_noise_path, audio_length, sampling_rate)
             mixed_audio_data = audio_mixer(voice_data, env_noise_data)
             # オーディオデータをスペクトログラムに変換
-            mixed_spec = wav_to_spec(mixed_audio_data, fft_size, hop_length)
+            mixed_mag, _ = wav_to_spec(mixed_audio_data, fft_size, hop_length)
             # スペクトグラムを正規化(雑音を混ぜる前と混ぜた後で人の声の音量を一致させるためmax_specで割る)
-            normed_mixed_spec = mixed_spec / max_spec
+            normed_mixed_mag = mixed_mag / max_mag
             # .npy形式でスペクトログラムを保存
             mixed_file_path = os.path.join(train_data_path, mixed_file_name)
-            np.save(mixed_file_path, normed_mixed_spec)
+            np.save(mixed_file_path, normed_mixed_mag)
 
     # validationデータ(評価用のスペクトログラム)を作成
     print("validationデータ作成中")
@@ -107,13 +110,13 @@ if __name__ == '__main__':
         target_file_name = voice_file_name.split('.')[0] + "_target.npy" # (例)BASIC5000_0001_target.npy
         voice_data = load_audio_file(voice_path, audio_length, sampling_rate)
         # オーディオデータをスペクトログラムに変換
-        voice_spec = wav_to_spec(voice_data, fft_size, hop_length)
+        voice_mag, _ = wav_to_spec(voice_data, fft_size, hop_length)
         # スペクトログラムを正規化
-        max_spec = voice_spec.max()
-        normed_voice_spec = voice_spec / max_spec
+        max_mag = voice_mag.max()
+        normed_voice_mag = voice_mag / max_mag
         # .npy形式でスペクトログラムを保存
         target_file_path = os.path.join(val_data_path, target_file_name)
-        np.save(target_file_path, normed_voice_spec)
+        np.save(target_file_path, normed_voice_mag)
         # 人の発話音声それぞれに対して、複数の環境音を混ぜ合わせて混合音声を作成
         for idx, env_noise_path in enumerate(env_noise_list_for_val):
             noise_idx = str(idx).zfill(3)
@@ -121,12 +124,12 @@ if __name__ == '__main__':
             env_noise_data = load_audio_file(env_noise_path, audio_length, sampling_rate)
             mixed_audio_data = audio_mixer(voice_data, env_noise_data)
             # オーディオデータをスペクトログラムに変換
-            mixed_spec = wav_to_spec(mixed_audio_data, fft_size, hop_length)
+            mixed_mag, _ = wav_to_spec(mixed_audio_data, fft_size, hop_length)
             # スペクトグラムを正規化(雑音を混ぜる前と混ぜた後で人の声の音量を一致させるためmax_specで割る)
-            normed_mixed_spec = mixed_spec / max_spec
+            normed_mixed_mag = mixed_mag / max_mag
             # .npy形式でスペクトログラムを保存
             mixed_file_path = os.path.join(val_data_path, mixed_file_name)
-            np.save(mixed_file_path, normed_mixed_spec)
+            np.save(mixed_file_path, normed_mixed_mag)
 
     # testデータ(テスト用のオーディオファイル)を作成
     print("testデータ作成中")

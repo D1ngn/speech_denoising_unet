@@ -8,33 +8,28 @@ import numpy as np
 import librosa
 
 from train import Unet
-from mk_data import load_audio_file, save_audio_file
+from mk_data import load_audio_file, save_audio_file, wav_to_spec
 
 
-
-# 音声データをスペクトログラムに変換する
-def wav_to_spec_for_inference(data, fft_size, hop_length):
-    # 短時間フーリエ変換(STFT)を行い、スペクトログラムを取得
-    spec = librosa.stft(data, n_fft=fft_size, hop_length=hop_length)
-    mag = np.abs(spec) # 振幅スペクトログラムを取得
-    phase = np.exp(1.j * np.angle(spec)) # 位相スペクトログラムを取得(フェーザ表示)
-    return mag, phase
-
-
+# スペクトログラムを音声データに変換する
+def spec_to_wav(spec, hop_length):
+    # 逆短時間フーリエ変換(iSTFT)を行い、スペクトログラムから音声データを取得
+    wav_data = librosa.istft(spec, hop_length=hop_length)
+    return wav_data
 
 
 if __name__ == '__main__':
 
-    # 学習済みの重みのパスを指定
-    weights_path = "./ckpt/ckpt_epoch{}.pt"
+    # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
+    checkpoint_path = "./ckpt/ckpt_epoch{}.pt"
     # ネットワークモデルを指定
     net = Unet()
     # GPUが使える場合あはGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("使用デバイス：" , device)
-    # 学習済みの重みをロード
-    net_weights = torch.load(weights_path, map_location=device)
-    net.load_state_dict(net_weights)
+    # 学習済みのパラメータをロード
+    net_params = torch.load(checkpoint_path, map_location=device)
+    net.load_state_dict(net_params['model_state_dict'])
     # Unetを使って推論
     # ネットワークを推論モードへ
     net.eval()
@@ -48,7 +43,7 @@ if __name__ == '__main__':
     #　音声データをスペクトログラムに変換
     fft_size = 1024 # 高速フーリエ変換のフレームサイズ
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
-    input_mag, input_phase = wav_to_spec_for_inference(input_audio_data, fft_size, hop_length) # wavをスペクトログラムへ
+    input_mag, input_phase = wav_to_spec(input_audio_data, fft_size, hop_length) # wavをスペクトログラムへ
     # スペクトログラムを正規化
     max_mag = input_mag.max()
     normed_input_mag = input_mag / max_mag
@@ -66,7 +61,7 @@ if __name__ == '__main__':
     separated_voice_mag = mask * mag_expanded
     # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
     voice_spec = separated_voice_mag * input_phase
-    output_audio_data = librosa.istft(voice_spec, hop_length=hop_length)
+    output_audio_data = spec_to_wav(voice_spec, hop_length)
     # オーディオファイルを保存
     save_path = "./output/masked_voice.wav"
     save_audio_file(save_path, output_audio_data, sampling_rate=16000)

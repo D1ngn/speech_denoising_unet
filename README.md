@@ -22,8 +22,9 @@
 ```
 voice_separation
 ├── README.md
-├── train.py
-├── mk_data.py
+├── mk_data.py (データ作成用プログラム)
+├── train.py (学習用プログラム)
+├── inference.py (学習済みモデル実行用プログラム)
 └── data
     ├── jvs_ver1 (複数の日本人の発話データ)
     ├── environmental-sound-classification-50 (環境音の音声データ)
