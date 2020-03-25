@@ -7,6 +7,7 @@ import random
 
 from tqdm import tqdm
 
+
 #　音声データをロードし、指定された秒数とサンプリングレートでリサンプル
 def load_audio_file(file_path, length, sampling_rate=16000):
     data, sr = librosa.load(file_path, sr=sampling_rate)

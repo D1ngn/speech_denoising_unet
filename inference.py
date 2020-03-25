@@ -5,7 +5,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data as data
 import numpy as np
+import matplotlib.pyplot as plt
 import librosa
+import wave
+
 
 from train import Unet
 from mk_data import load_audio_file, save_audio_file, wav_to_spec
@@ -18,10 +21,23 @@ def spec_to_wav(spec, hop_length):
     return wav_data
 
 
+# スペクトログラムを図にプロットする関数
+def spec_plot(input_spec, save_path):
+    # パワースペクトルを対数パワースペクトルに変換
+    log_power_spec = librosa.amplitude_to_db(input_spec, ref=np.max)
+    plt.figure(figsize=(12,5)) # 図の大きさを指定
+    librosa.display.specshow(log_power_spec, x_axis='time', y_axis='log')
+    plt.title('Spectroram') # タイトル
+    plt.xlabel("time[s]") # 横軸のラベル
+    plt.ylabel("amplitude") # 縦軸のラベル
+    plt.colorbar(format='%+02.0f dB') # カラーバー表示
+    plt.savefig(save_path)
+
+
 if __name__ == '__main__':
 
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
-    checkpoint_path = "./ckpt/ckpt_epoch{}.pt"
+    checkpoint_path = "./ckpt/ckpt_epoch50.pt"
     # ネットワークモデルを指定
     net = Unet()
     # GPUが使える場合あはGPUを使用、使えない場合はCPUを使用
@@ -50,18 +66,40 @@ if __name__ == '__main__':
     # データの形式をモデルに入力できる形式に変更する
     # librosaを使って、スペクトログラムを算出すると周波数要素が513になるので、512にスライス
     mag_sliced = normed_input_mag[1:, :]
+    phase_sliced = input_phase[1:, :]
     # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
     mag_padded = np.pad(mag_sliced, [(0, 0), (0, 128 - mag_sliced.shape[1])], 'constant')
+    phase_padded = np.pad(phase_sliced, [(0, 0), (0, 128 - mag_sliced.shape[1])], 'constant')
     # 0次元目と1次元目に次元を追加
     mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :] # shape:(1, 1, 512, 128)
+    phase_expanded = phase_padded[np.newaxis, np.newaxis, :, :]
+    # numpy形式のデータをpytorchのテンソルに変換
+    mag_tensor = torch.from_numpy(mag_expanded)
 
     # 環境音のmaskを計算
-    mask = net(mag_expanded)
+    mask = net(mag_tensor)
+    # pytorchのtensorをnumpy配列に変換
+    mask = mask.detach().numpy()
     # 人の声を取り出す
     separated_voice_mag = mask * mag_expanded
     # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
-    voice_spec = separated_voice_mag * input_phase
-    output_audio_data = spec_to_wav(voice_spec, hop_length)
-    # オーディオファイルを保存
-    save_path = "./output/masked_voice.wav"
-    save_audio_file(save_path, output_audio_data, sampling_rate=16000)
+    voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
+    voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
+    masked_voice_data = spec_to_wav(voice_spec, hop_length)
+
+    # オーディオファイルとそのスペクトログラムを保存
+    masked_voice_path = "./output/wav/masked_voice.wav"
+    save_audio_file(masked_voice_path, masked_voice_data, sampling_rate=16000)
+
+    # デバッグ用に元のオーディオファイルとそのスペクトログラムを保存
+    mixed_voice_path = "./output/wav/mixed_voice.wav"
+    save_audio_file(mixed_voice_path, input_audio_data, sampling_rate=16000)
+
+    # オーディオファイルに対応するスペクトログラムを保存
+    # 分離音のスペクトログラム
+    masked_voice_spec_path = "./output/spectrogram/masked_voice.png"
+    separated_voice_mag = np.squeeze(separated_voice_mag) # 次元削減
+    spec_plot(separated_voice_mag, masked_voice_spec_path)
+    # 混合音声のスペクトログラム
+    mixed_voice_spec_path = "./output/spectrogram/mixed_voice.png"
+    spec_plot(input_mag, mixed_voice_spec_path)
