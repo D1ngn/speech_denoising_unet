@@ -64,22 +64,23 @@ if __name__ == '__main__':
     net.eval()
 
     # 音声ファイルのパスを指定
-    input_audio_file = "./data/voice1000_noise100/test/BASIC5000_1017_001_mixed.wav"
+    original_audio_file = "./data/voice1000_noise100/test/BASIC5000_1017_target.wav"
+    mixed_audio_file = "./data/voice1000_noise100/test/BASIC5000_1017_001_mixed.wav"
     # 音声データをロード(現在は学習時と同じ処理をしているが、いずれはマイクロホンのリアルストリーミング音声を入力にしたい)
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
     audio_length = 5 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適化かも？
-    input_audio_data = load_audio_file(input_audio_file, audio_length, sampling_rate)
+    mixed_audio_data = load_audio_file(mixed_audio_file, audio_length, sampling_rate)
     #　音声データをスペクトログラムに変換
     fft_size = 1024 # 高速フーリエ変換のフレームサイズ
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
-    input_mag, input_phase = wav_to_spec(input_audio_data, fft_size, hop_length) # wavをスペクトログラムへ
+    mixed_mag, mixed_phase = wav_to_spec(mixed_audio_data, fft_size, hop_length) # wavをスペクトログラムへ
     # スペクトログラムを正規化
-    max_mag = input_mag.max()
-    normed_input_mag = input_mag / max_mag
+    max_mag = mixed_mag.max()
+    normed_mixed_mag = mixed_mag / max_mag
     # データの形式をモデルに入力できる形式に変更する
     # librosaを使って、スペクトログラムを算出すると周波数要素が513になるので、512にスライス
-    mag_sliced = normed_input_mag[1:, :]
-    phase_sliced = input_phase[1:, :]
+    mag_sliced = normed_mixed_mag[1:, :]
+    phase_sliced = mixed_phase[1:, :]
     # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
     mag_padded = np.pad(mag_sliced, [(0, 0), (0, 128 - mag_sliced.shape[1])], 'constant')
     phase_padded = np.pad(phase_sliced, [(0, 0), (0, 128 - mag_sliced.shape[1])], 'constant')
@@ -108,17 +109,17 @@ if __name__ == '__main__':
 
     # デバッグ用に元のオーディオファイルとそのスペクトログラムを保存
     mixed_voice_path = "./output/wav/mixed_voice.wav"
-    save_audio_file(mixed_voice_path, input_audio_data, sampling_rate=16000)
+    save_audio_file(mixed_voice_path, mixed_audio_data, sampling_rate=16000)
 
     # オーディオファイルに対応するスペクトログラムを保存
     # 現在のディレクトリ位置を取得
     base_dir = os.getcwd()
+    # オリジナル音声のスペクトログラム
+    original_voice_spec_path = "./output/spectrogram/original.png"
+    spec_plot(base_dir, original_audio_file, original_voice_spec_path)
     # 分離音のスペクトログラム
     masked_voice_spec_path = "./output/spectrogram/masked_voice.png"
-    # separated_voice_mag = np.squeeze(separated_voice_mag) # 次元削減
-    # spec_plot_old(separated_voice_mag, masked_voice_spec_path)
     spec_plot(base_dir, masked_voice_path, masked_voice_spec_path)
     # 混合音声のスペクトログラム
     mixed_voice_spec_path = "./output/spectrogram/mixed_voice.png"
-    # spec_plot_old(input_mag, mixed_voice_spec_path)
     spec_plot(base_dir, mixed_voice_path, mixed_voice_spec_path)
