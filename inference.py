@@ -4,10 +4,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data as data
+
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import librosa
 import wave
+import subprocess
 
 
 from train import Unet
@@ -21,8 +24,8 @@ def spec_to_wav(spec, hop_length):
     return wav_data
 
 
-# スペクトログラムを図にプロットする関数
-def spec_plot(input_spec, save_path):
+# スペクトログラムを図にプロットする関数 今は使っていない
+def spec_plot_old(input_spec, save_path):
     # パワースペクトルを対数パワースペクトルに変換
     log_power_spec = librosa.amplitude_to_db(input_spec, ref=np.max)
     plt.figure(figsize=(12,5)) # 図の大きさを指定
@@ -33,6 +36,16 @@ def spec_plot(input_spec, save_path):
     plt.colorbar(format='%+02.0f dB') # カラーバー表示
     plt.savefig(save_path)
 
+# スペクトログラムを図にプロットする関数
+def spec_plot(base_dir, wav_path, save_path):
+    # soxコマンドによりwavファイルからスペクトログラムの画像を生成
+    cmd1 = "sox {} -n trim 0 5 rate 16.0k spectrogram".format(wav_path)
+    subprocess.call(cmd1, shell=True)
+    # 生成されたスペクトログラム画像を移動
+    #(inference.pyを実行したディレクトリにスペクトログラムが生成されてしまうため)
+    spec_path = os.path.join(base_dir, "spectrogram.png")
+    cmd2 = "mv {} {}".format(spec_path, save_path)
+    subprocess.call(cmd2, shell=True)
 
 if __name__ == '__main__':
 
@@ -81,7 +94,9 @@ if __name__ == '__main__':
     # pytorchのtensorをnumpy配列に変換
     mask = mask.detach().numpy()
     # 人の声を取り出す
-    separated_voice_mag = mask * mag_expanded
+    normed_separated_voice_mag = mask * mag_expanded
+    # 正規化によって小さくなった音量を元に戻す
+    separated_voice_mag = normed_separated_voice_mag * max_mag
     # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
     voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
     voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
@@ -96,10 +111,14 @@ if __name__ == '__main__':
     save_audio_file(mixed_voice_path, input_audio_data, sampling_rate=16000)
 
     # オーディオファイルに対応するスペクトログラムを保存
+    # 現在のディレクトリ位置を取得
+    base_dir = os.getcwd()
     # 分離音のスペクトログラム
     masked_voice_spec_path = "./output/spectrogram/masked_voice.png"
-    separated_voice_mag = np.squeeze(separated_voice_mag) # 次元削減
-    spec_plot(separated_voice_mag, masked_voice_spec_path)
+    # separated_voice_mag = np.squeeze(separated_voice_mag) # 次元削減
+    # spec_plot_old(separated_voice_mag, masked_voice_spec_path)
+    spec_plot(base_dir, masked_voice_path, masked_voice_spec_path)
     # 混合音声のスペクトログラム
     mixed_voice_spec_path = "./output/spectrogram/mixed_voice.png"
-    spec_plot(input_mag, mixed_voice_spec_path)
+    # spec_plot_old(input_mag, mixed_voice_spec_path)
+    spec_plot(base_dir, mixed_voice_path, mixed_voice_spec_path)
