@@ -167,7 +167,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
             if phase == 'train':
                 net.train() # 学習モード
             else:
-                if (epoch % 10 == 0): # 10回ごとに検証
+                if ((epoch+1) % 10 == 0): # 10回ごとに検証
                     net.eval() # 検証モード
                 else:
                     continue
@@ -228,7 +228,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
             # 学習を再開できるように変更
             torch.save({
             'epoch': epoch+1,
-            'model_state_dict': net.state_dict(),
+            'state_dict': net.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'log_epoch': log_epoch
             }, param_save_path)
