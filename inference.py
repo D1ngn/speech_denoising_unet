@@ -46,12 +46,13 @@ if __name__ == '__main__':
     # 学習済みのパラメータをロード
     net_params = torch.load(checkpoint_path, map_location=device)
     net.load_state_dict(net_params['model_state_dict'])
+    # net.load_state_dict(net_params) # 古いバージョン
     # Unetを使って推論
     # ネットワークを推論モードへ
     net.eval()
 
     # 音声ファイルのパスを指定
-    input_audio_file = "./data/voice1000_noise100/test/BASIC5000_1017_001_mixed.wav"
+    # input_audio_file = "./data/voice1000_noise100/test/BASIC5000_0921_000_mixed.wav"
     # 音声データをロード(現在は学習時と同じ処理をしているが、いずれはマイクロホンのリアルストリーミング音声を入力にしたい)
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
     audio_length = 5 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適化かも？
