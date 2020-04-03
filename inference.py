@@ -58,7 +58,7 @@ if __name__ == '__main__':
     print("使用デバイス：" , device)
     # 学習済みのパラメータをロード
     net_params = torch.load(checkpoint_path, map_location=device)
-    net.load_state_dict(net_params['model_state_dict'])
+    net.load_state_dict(net_params['state_dict'])
     # Unetを使って推論
     # ネットワークを推論モードへ
     net.eval()
