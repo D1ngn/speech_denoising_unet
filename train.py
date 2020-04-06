@@ -152,9 +152,6 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("使用デバイス：" , device)
 
-    # ネットワークをGPUへ
-    net.to(device)
-
     # ネットワークがある程度固定であれば、高速化させる
     torch.backends.cudnn.benchmark = True
 
@@ -174,6 +171,8 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
     else:
         print("checkpointファイルがありません。最初から学習を開始します。")
 
+    # ネットワークをGPUへ
+    net.to(device)
 
     # epochごとのループ
     for epoch in range(start_epoch, num_epochs):
