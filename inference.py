@@ -58,7 +58,7 @@ if __name__ == '__main__':
     print("使用デバイス：" , device)
     # 学習済みのパラメータをロード
     net_params = torch.load(checkpoint_path, map_location=device)
-    net.load_state_dict(net_params['state_dict'])
+    net.load_state_dict(net_params['model_state_dict'])
     # Unetを使って推論
     # ネットワークを推論モードへ
     net.eval()
@@ -108,6 +108,13 @@ if __name__ == '__main__':
     save_audio_file(masked_voice_path, masked_voice_data, sampling_rate=16000)
 
     # デバッグ用に元のオーディオファイルとそのスペクトログラムを保存
+    # オリジナル音声
+    # original_voice_path = "./output/wav/original_voice.wav"
+    # cmd = "cp {} {}".format(original_audio_file, original_voice_path)
+    # subprocess.call(cmd, shell=True)
+    # original_audio_data = load_audio_file(original_audio_file, audio_length, sampling_rate)
+    # save_audio_file(original_voice_path, original_audio_data, sampling_rate=16000)
+    # 混合音声
     mixed_voice_path = "./output/wav/mixed_voice.wav"
     save_audio_file(mixed_voice_path, mixed_audio_data, sampling_rate=16000)
 

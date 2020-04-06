@@ -15,6 +15,20 @@ import pandas as pd
 import glob
 import pickle as pl
 
+
+def load_checkpoint(model, optimizer, checkpoint_path, device):
+    # チェックポイントファイルがない場合エラー
+    assert os.path.isfile(checkpoint_path)
+    # チェックポイントファイルをロード
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    start_epoch = checkpoint['epoch']
+    model.load_state_dict(checkpoint['state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    log_epoch = checkpoint['log_epoch']
+    print("{}からデータをロードしました。エポック{}から学習を開始します。").format(checkpoint_path, start_epoch)
+    return start_epoch, model, optimizer, log_epoch
+
+
 # データの前処理を行うクラス
 class NumpyToTensor():
     def __init__(self, spec_freq_dim, spec_frame_num):
@@ -132,7 +146,7 @@ class VoiceDataset(data.Dataset):
 
 
 # モデルを学習させる関数を作成
-def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir):
+def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=None):
 
     # GPUが使える場合あはGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -145,6 +159,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
     torch.backends.cudnn.benchmark = True
 
     # 各カウンタを初期化
+    start_epoch = 0
     iteration = 1
     epoch_train_loss = 0.0
     epoch_val_loss = 0.0
@@ -153,8 +168,15 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
     # 学習済みモデルのパラメータを保存するディレクトリを作成
     os.makedirs(param_save_dir, exist_ok=True)
 
+    # 学習を再開する場合はパラメータをロード、最初から始める場合は特に処理は行われない
+    if checkpoint_path is not None:
+        net, optimizer, start_epoch, log_epoch = load_checkpoint(net, optimizer, checkpoint_path, device)
+    else:
+        print("checkpointファイルがありません。最初から学習を開始します。")
+
+
     # epochごとのループ
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
 
         # 開始時刻を記録
         epoch_start_time = time.time()
@@ -251,14 +273,14 @@ if __name__ == '__main__':
     val_dataset = VoiceDataset(val_mixed_spec_list, val_target_spec_list, transform=transform)
     #　データローダーを作成
     train_dataloader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     dataloaders_dict = {'train':train_dataloader, 'val':val_dataloader} # データローダーを格納するリスト
     # 損失関数を定義
     criterion = nn.L1Loss(reduction='sum') # L1Loss(input, target) : inputとtargetの各要素の差の絶対値の和
     # 最適化手法を定義
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     # 各種設定 → いずれ１つのファイルからデータを読み込ませたい
-    num_epochs = 50 # epoch数を指定
-    checkpoint_dir = "./ckpt" # 学習済みモデルを保存するディレクトリのパスを指定
+    num_epochs = 300 # epoch数を指定
+    param_save_dir = "./ckpt" # 学習済みモデルを保存するディレクトリのパスを指定
     #　モデルを学習
-    train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, checkpoint_dir)
+    train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=None)
