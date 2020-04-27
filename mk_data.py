@@ -44,11 +44,14 @@ if __name__ == '__main__':
     # 各パラメータを設定
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
     audio_length = 5 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適化かも？
-    voice_num_samples = 1000 # 人の発話音声のファイル数
-    env_noise_num_samples = 100 #環境音のファイル数
+    voice_num_samples = 100 # 人の発話音声のファイル数
+    env_noise_num_samples = 10 # 環境音のファイル数
     train_val_ratio = 0.9 # trainデータとvalidationデータの割合
     fft_size = 1024 # 高速フーリエ変換のフレームサイズ
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
+    num_test_voice_samples = 10 # テスト用の人の発話音声のファイル数
+    num_test_env_noise_samples = 10 # テスト用の環境音のファイル数
+    noise_amplitude_decay = 0.3 # 環境音を混ぜる際の振幅の減衰率
 
     # データセットを格納するディレクトリを作成
     save_dataset_dir = "./data/voice{}_noise{}/".format(voice_num_samples, env_noise_num_samples)
@@ -61,7 +64,7 @@ if __name__ == '__main__':
     voice_list_for_train = voice_list[:int(voice_num_samples*train_val_ratio)]
     voice_list_for_val = voice_list[int(voice_num_samples*train_val_ratio):]
     # test用のデータも別途作成
-    voice_list_for_test = random.sample(glob.glob(voice_data_path_template), 10)
+    voice_list_for_test = random.sample(glob.glob(voice_data_path_template), num_test_voice_samples)
 
     # 環境音のファイルパスを無作為に取得
     env_noise_path_template = "./data/environmental-sound-classification-50/audio/audio/16000/*.wav"
@@ -70,7 +73,7 @@ if __name__ == '__main__':
     env_noise_list_for_train = env_noise_list[:int(env_noise_num_samples*train_val_ratio)]
     env_noise_list_for_val = env_noise_list[int(env_noise_num_samples*train_val_ratio):]
     # test用のデータも別途作成
-    env_noise_list_for_test = random.sample(glob.glob(env_noise_path_template), 10)
+    env_noise_list_for_test = random.sample(glob.glob(env_noise_path_template), num_test_env_noise_samples)
 
     # trainデータ(学習用のスペクトログラム)を作成
     print("trainデータ作成中")
@@ -93,6 +96,7 @@ if __name__ == '__main__':
             noise_idx = str(idx).zfill(3)
             mixed_file_name = voice_file_name.split('.')[0] + "_" + noise_idx + "_mixed.npy" # (例)BASIC5000_0001_001_mixed.npy
             env_noise_data = load_audio_file(env_noise_path, audio_length, sampling_rate)
+            env_noise_data = env_noise_data * noise_amplitude_decay # 環境音の大きさを小さくする
             mixed_audio_data = audio_mixer(voice_data, env_noise_data)
             # オーディオデータをスペクトログラムに変換
             mixed_mag, _ = wav_to_spec(mixed_audio_data, fft_size, hop_length)
@@ -123,6 +127,7 @@ if __name__ == '__main__':
             noise_idx = str(idx).zfill(3)
             mixed_file_name = voice_file_name.split('.')[0] + "_" + noise_idx + "_mixed.npy" # (例)BASIC5000_0001_001_mixed.npy
             env_noise_data = load_audio_file(env_noise_path, audio_length, sampling_rate)
+            env_noise_data = env_noise_data * noise_amplitude_decay # 環境音の大きさを小さくする
             mixed_audio_data = audio_mixer(voice_data, env_noise_data)
             # オーディオデータをスペクトログラムに変換
             mixed_mag, _ = wav_to_spec(mixed_audio_data, fft_size, hop_length)
@@ -148,6 +153,7 @@ if __name__ == '__main__':
             noise_idx = str(idx).zfill(3)
             mixed_file_name = voice_file_name.split('.')[0] + "_" + noise_idx + "_mixed.wav"
             env_noise_data = load_audio_file(env_noise_path, audio_length, sampling_rate)
+            env_noise_data = env_noise_data * noise_amplitude_decay # 環境音の大きさを小さくする
             mixed_audio_data = audio_mixer(voice_data, env_noise_data)
             # 混合した音声データのサンプリング周波数を指定して保存
             mixed_file_path = os.path.join(test_data_path, mixed_file_name)

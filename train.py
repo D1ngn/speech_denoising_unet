@@ -66,7 +66,7 @@ class Unet(nn.Module):
         self.norm5 = nn.BatchNorm2d(256)
         self.conv6 = nn.Conv2d(256, 512, 4, stride=2, padding=1)
         self.norm6 = nn.BatchNorm2d(512)
-        self.leaky_relu = nn.LeakyReLU(0.2)
+        self.leaky_relu = nn.LeakyReLU(0.2, inplace=True) # inplace=Trueにすることで、使用メモリを削減
         # decoderの層
         self.deconv1 = nn.ConvTranspose2d(512, 256, 4, stride=2, padding=1)
         self.denorm1 = nn.BatchNorm2d(256)
@@ -80,7 +80,7 @@ class Unet(nn.Module):
         self.denorm5 = nn.BatchNorm2d(16)
         self.deconv6 = nn.ConvTranspose2d(32, 1, 4, stride=2, padding=1)
         self.dropout = nn.Dropout2d(p=0.5)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True) # inplace=Trueにすることで、使用メモリを削減
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -208,6 +208,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
                     loss = criterion(mask*mixed_spec, target_spec)
                     # 学習時は誤差逆伝播(バックプロパゲーション)
                     if phase == 'train':
+                        # 誤差逆伝播を行い、勾配を算出
                         loss.backward()
                         # パラメータ更新
                         optimizer.step()
