@@ -11,11 +11,12 @@ import matplotlib.pyplot as plt
 import librosa
 import librosa.display
 import time
+import argparse
 import pandas as pd
 import glob
 import pickle as pl
 
-
+# 既存のチェックポイントファイルをロード
 def load_checkpoint(model, optimizer, checkpoint_path, device):
     # チェックポイントファイルがない場合エラー
     assert os.path.isfile(checkpoint_path)
@@ -25,7 +26,7 @@ def load_checkpoint(model, optimizer, checkpoint_path, device):
     model.load_state_dict(checkpoint['state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     log_epoch = checkpoint['log_epoch']
-    print("{}からデータをロードしました。エポック{}から学習を開始します。").format(checkpoint_path, start_epoch)
+    print("{}からデータをロードしました。エポック{}から学習を再開します。".format(checkpoint_path, start_epoch))
     return start_epoch, model, optimizer, log_epoch
 
 
@@ -146,7 +147,7 @@ class VoiceDataset(data.Dataset):
 
 
 # モデルを学習させる関数を作成
-def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=None):
+def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path):
 
     # GPUが使える場合あはGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -167,7 +168,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
 
     # 学習を再開する場合はパラメータをロード、最初から始める場合は特に処理は行われない
     if checkpoint_path is not None:
-        net, optimizer, start_epoch, log_epoch = load_checkpoint(net, optimizer, checkpoint_path, device)
+        start_epoch, net, optimizer, log_epoch = load_checkpoint(net, optimizer, checkpoint_path, device)
     else:
         print("checkpointファイルがありません。最初から学習を開始します。")
 
@@ -244,7 +245,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
         epoch_val_loss = 0.0
 
         # 学習したモデルのパラメータを保存
-        if ((epoch+1) % 10 == 0):
+        if ((epoch+1) % 100 == 0):
             param_save_path = os.path.join(param_save_dir, "ckpt_epoch{}.pt".format(epoch+1))
             # torch.save(net.state_dict(), param_save_path) #　推論のみを行う場合
             # 学習を再開できるように変更
@@ -257,6 +258,11 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
 
 
 if __name__ == '__main__':
+
+    # コマンドライン引数を受け取る
+    parser = argparse.ArgumentParser(description='for unet train')
+    parser.add_argument('--checkpoint_path', default=None, help="checkpoint path if you restart training")
+    args = parser.parse_args()
     # 各パラメータを設定
     batch_size = 64 # バッチサイズ
     spec_freq_dim = 512 # スペクトログラムの周波数次元数
@@ -281,6 +287,6 @@ if __name__ == '__main__':
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     # 各種設定 → いずれ１つのファイルからデータを読み込ませたい
     num_epochs = 300 # epoch数を指定
-    param_save_dir = "./ckpt" # 学習済みモデルを保存するディレクトリのパスを指定
+    param_save_dir = "./ckpt" # 学習済みモデルのパラメータを保存するディレクトリのパスを指定
     #　モデルを学習
-    train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=None)
+    train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=args.checkpoint_path)

@@ -11,10 +11,11 @@ import matplotlib.pyplot as plt
 import librosa
 import wave
 import subprocess
+import time
 
 
 from train import Unet
-from mk_data import load_audio_file, save_audio_file, wav_to_spec
+from mk_data import load_audio_file, save_audio_file, wave_to_spec
 
 
 # スペクトログラムを音声データに変換する
@@ -49,31 +50,36 @@ def spec_plot(base_dir, wav_path, save_path):
 
 if __name__ == '__main__':
 
+    sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
+    audio_length = 5 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適かも？
+    fft_size = 1024 # 高速フーリエ変換のフレームサイズ
+    hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
+
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
-    checkpoint_path = "./ckpt/ckpt_epoch50.pt"
+    checkpoint_path = "./ckpt/ckpt_epoch700.pt"
     # ネットワークモデルを指定
     net = Unet()
-    # GPUが使える場合あはGPUを使用、使えない場合はCPUを使用
+    # GPUが使える場合はGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("使用デバイス：" , device)
     # 学習済みのパラメータをロード
     net_params = torch.load(checkpoint_path, map_location=device)
-    net.load_state_dict(net_params['model_state_dict'])
+    net.load_state_dict(net_params['state_dict'])
     # Unetを使って推論
     # ネットワークを推論モードへ
     net.eval()
 
+    # 分離処理の開始時間
+    start_time = time.time()
     # 音声ファイルのパスを指定
-    original_audio_file = "./data/voice1000_noise100/test/BASIC5000_1017_target.wav"
-    mixed_audio_file = "./data/voice1000_noise100/test/BASIC5000_1017_001_mixed.wav"
+    original_audio_file = "./data/voice100_noise10/test/BASIC5000_0853_target.wav"
+    mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_0853_001_mixed.wav"
+    # original_audio_file = "./data/voice100_noise10/test/BASIC5000_1222_target.wav"
+    # mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_1222_007_mixed.wav"
     # 音声データをロード(現在は学習時と同じ処理をしているが、いずれはマイクロホンのリアルストリーミング音声を入力にしたい)
-    sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
-    audio_length = 5 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適化かも？
     mixed_audio_data = load_audio_file(mixed_audio_file, audio_length, sampling_rate)
     #　音声データをスペクトログラムに変換
-    fft_size = 1024 # 高速フーリエ変換のフレームサイズ
-    hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
-    mixed_mag, mixed_phase = wav_to_spec(mixed_audio_data, fft_size, hop_length) # wavをスペクトログラムへ
+    mixed_mag, mixed_phase = wave_to_spec(mixed_audio_data, fft_size, hop_length) # wavをスペクトログラムへ
     # スペクトログラムを正規化
     max_mag = mixed_mag.max()
     normed_mixed_mag = mixed_mag / max_mag
@@ -82,14 +88,13 @@ if __name__ == '__main__':
     mag_sliced = normed_mixed_mag[1:, :]
     phase_sliced = mixed_phase[1:, :]
     # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
-    mag_padded = np.pad(mag_sliced, [(0, 0), (0, 128 - mag_sliced.shape[1])], 'constant')
-    phase_padded = np.pad(phase_sliced, [(0, 0), (0, 128 - mag_sliced.shape[1])], 'constant')
+    mag_padded = np.pad(mag_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
+    phase_padded = np.pad(phase_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
     # 0次元目と1次元目に次元を追加
     mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :] # shape:(1, 1, 512, 128)
     phase_expanded = phase_padded[np.newaxis, np.newaxis, :, :]
     # numpy形式のデータをpytorchのテンソルに変換
     mag_tensor = torch.from_numpy(mag_expanded)
-
     # 環境音のmaskを計算
     mask = net(mag_tensor)
     # pytorchのtensorをnumpy配列に変換
@@ -102,18 +107,22 @@ if __name__ == '__main__':
     voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
     voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
     masked_voice_data = spec_to_wav(voice_spec, hop_length)
-
     # オーディオファイルとそのスペクトログラムを保存
     masked_voice_path = "./output/wav/masked_voice.wav"
     save_audio_file(masked_voice_path, masked_voice_data, sampling_rate=16000)
+    # 分離処理の終了時間
+    finish_time = time.time()
+    # 処理時間
+    process_time = finish_time - start_time
+    print("処理時間：", str(process_time) + 'sec')
 
     # デバッグ用に元のオーディオファイルとそのスペクトログラムを保存
     # オリジナル音声
-    # original_voice_path = "./output/wav/original_voice.wav"
+    original_voice_path = "./output/wav/original_voice.wav"
     # cmd = "cp {} {}".format(original_audio_file, original_voice_path)
     # subprocess.call(cmd, shell=True)
-    # original_audio_data = load_audio_file(original_audio_file, audio_length, sampling_rate)
-    # save_audio_file(original_voice_path, original_audio_data, sampling_rate=16000)
+    original_audio_data = load_audio_file(original_audio_file, audio_length, sampling_rate)
+    save_audio_file(original_voice_path, original_audio_data, sampling_rate=16000)
     # 混合音声
     mixed_voice_path = "./output/wav/mixed_voice.wav"
     save_audio_file(mixed_voice_path, mixed_audio_data, sampling_rate=16000)

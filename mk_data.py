@@ -2,6 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import librosa
+import soundfile as sf
 import glob
 import random
 
@@ -21,7 +22,8 @@ def load_audio_file(file_path, length, sampling_rate=16000):
 
 # 音声データを指定したサンプリングレートで保存
 def save_audio_file(file_path, data, sampling_rate=16000):
-    librosa.output.write_wav(file_path, data, sampling_rate)
+    # librosa.output.write_wav(file_path, data, sampling_rate) # 正常に動作しないので変更
+    sf.write(file_path, data, sampling_rate)
 
 # 2つのオーディオデータを足し合わせる
 def audio_mixer(data1, data2):
@@ -31,7 +33,7 @@ def audio_mixer(data1, data2):
 
 
 # 音声データをスペクトログラムに変換する
-def wav_to_spec(data, fft_size, hop_length):
+def wave_to_spec(data, fft_size, hop_length):
     # 短時間フーリエ変換(STFT)を行い、スペクトログラムを取得
     spec = librosa.stft(data, n_fft=fft_size, hop_length=hop_length)
     mag = np.abs(spec) # 振幅スペクトログラムを取得
@@ -84,7 +86,7 @@ if __name__ == '__main__':
         target_file_name = voice_file_name.split('.')[0] + "_target.npy" # (例)BASIC5000_0001_target.npy
         voice_data = load_audio_file(voice_path, audio_length, sampling_rate)
         # オーディオデータをスペクトログラムに変換
-        voice_mag, _ = wav_to_spec(voice_data, fft_size, hop_length)
+        voice_mag, _ = wave_to_spec(voice_data, fft_size, hop_length)
         # スペクトグラムを正規化
         max_mag = voice_mag.max()
         normed_voice_mag = voice_mag / max_mag
@@ -99,7 +101,7 @@ if __name__ == '__main__':
             env_noise_data = env_noise_data * noise_amplitude_decay # 環境音の大きさを小さくする
             mixed_audio_data = audio_mixer(voice_data, env_noise_data)
             # オーディオデータをスペクトログラムに変換
-            mixed_mag, _ = wav_to_spec(mixed_audio_data, fft_size, hop_length)
+            mixed_mag, _ = wave_to_spec(mixed_audio_data, fft_size, hop_length)
             # スペクトグラムを正規化(雑音を混ぜる前と混ぜた後で人の声の音量を一致させるためmax_specで割る)
             normed_mixed_mag = mixed_mag / max_mag
             # .npy形式でスペクトログラムを保存
@@ -115,7 +117,7 @@ if __name__ == '__main__':
         target_file_name = voice_file_name.split('.')[0] + "_target.npy" # (例)BASIC5000_0001_target.npy
         voice_data = load_audio_file(voice_path, audio_length, sampling_rate)
         # オーディオデータをスペクトログラムに変換
-        voice_mag, _ = wav_to_spec(voice_data, fft_size, hop_length)
+        voice_mag, _ = wave_to_spec(voice_data, fft_size, hop_length)
         # スペクトログラムを正規化
         max_mag = voice_mag.max()
         normed_voice_mag = voice_mag / max_mag
@@ -130,7 +132,7 @@ if __name__ == '__main__':
             env_noise_data = env_noise_data * noise_amplitude_decay # 環境音の大きさを小さくする
             mixed_audio_data = audio_mixer(voice_data, env_noise_data)
             # オーディオデータをスペクトログラムに変換
-            mixed_mag, _ = wav_to_spec(mixed_audio_data, fft_size, hop_length)
+            mixed_mag, _ = wave_to_spec(mixed_audio_data, fft_size, hop_length)
             # スペクトグラムを正規化(雑音を混ぜる前と混ぜた後で人の声の音量を一致させるためmax_specで割る)
             normed_mixed_mag = mixed_mag / max_mag
             # .npy形式でスペクトログラムを保存
