@@ -30,10 +30,37 @@ def write_wave(idx, data, sr, save_dir): # sr:サンプリング周波数
     w.close()
 
 
+# 人の声のスペクトログラムを抽出
+def extract_voice_spec(net, mixed_mag, mixed_phase):
+    # スペクトログラムを正規化
+    max_mag = mixed_mag.max()
+    normed_mixed_mag = mixed_mag / max_mag
+    # データの形式をモデルに入力できる形式に変更する
+    # librosaを使って、スペクトログラムを算出すると周波数要素が513になるので、512にスライス
+    mag_sliced = normed_mixed_mag[1:, :]
+    phase_sliced = mixed_phase[1:, :]
+    # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
+    mag_padded = np.pad(mag_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
+    phase_padded = np.pad(phase_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
+    # 0次元目と1次元目に次元を追加
+    mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :] # shape:(1, 1, 512, 128)
+    phase_expanded = phase_padded[np.newaxis, np.newaxis, :, :]
+    # numpy形式のデータをpytorchのテンソルに変換
+    mag_tensor = torch.from_numpy(mag_expanded)
+    # 環境音のmaskを計算
+    mask = net(mag_tensor)
+    # pytorchのtensorをnumpy配列に変換
+    mask = mask.detach().numpy()
+    # 人の声を取り出す
+    normed_separated_voice_mag = mask * mag_expanded
+    # 正規化によって小さくなった音量を元に戻す
+    separated_voice_mag = normed_separated_voice_mag * max_mag
+    # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
+    voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
+    voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
+    voice_spec = voice_spec[:, :mixed_mag.shape[1]] # 入力と同じ大きさのスペクトログラムに戻す
 
-def voice_separate(input):
-    # print(len(input))
-    return input
+    return voice_spec
 
 
 
@@ -83,35 +110,11 @@ if __name__ == "__main__":
         # チェンネル1のデータはmultichannel_data[:, 0]、チャンネル2のデータはmultichannel_data[:, 1]...
         # chunk_length = len(data) / CHANNELS
         # multichannel_data = np.reshape(data, (chunk_length, CHANNELS))
-        #　音声データをスペクトログラムに変換
+        # 音声データをスペクトログラムに変換
         mixed_mag, mixed_phase = wave_to_spec(data, fft_size, hop_length) # wavをスペクトログラムへ
-        # スペクトログラムを正規化
-        max_mag = mixed_mag.max()
-        normed_mixed_mag = mixed_mag / max_mag
-        # データの形式をモデルに入力できる形式に変更する
-        # librosaを使って、スペクトログラムを算出すると周波数要素が513になるので、512にスライス
-        mag_sliced = normed_mixed_mag[1:, :]
-        phase_sliced = mixed_phase[1:, :]
-        # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
-        mag_padded = np.pad(mag_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
-        phase_padded = np.pad(phase_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
-        # 0次元目と1次元目に次元を追加
-        mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :] # shape:(1, 1, 512, 128)
-        phase_expanded = phase_padded[np.newaxis, np.newaxis, :, :]
-        # numpy形式のデータをpytorchのテンソルに変換
-        mag_tensor = torch.from_numpy(mag_expanded)
-        # 環境音のmaskを計算
-        mask = net(mag_tensor)
-        # pytorchのtensorをnumpy配列に変換
-        mask = mask.detach().numpy()
-        # 人の声を取り出す
-        normed_separated_voice_mag = mask * mag_expanded
-        # 正規化によって小さくなった音量を元に戻す
-        separated_voice_mag = normed_separated_voice_mag * max_mag
-        # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
-        voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
-        voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
-        voice_spec = voice_spec[:, :mixed_mag.shape[1]] # 入力と同じ大きさのスペクトログラムに戻す
+        # マイクで取得した音声のスペクトログラムから人の声のスペクトログラムを抽出
+        voice_spec = extract_voice_spec(net, mixed_mag, mixed_phase)
+        # スペクトログラムを音声データに変換
         masked_voice_data = spec_to_wav(voice_spec, hop_length)
         # オーディオファイルとそのスペクトログラムを保存
         masked_voice_path = "./output/test/masked_voice{}.wav".format(audio_idx)
