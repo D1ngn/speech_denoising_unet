@@ -13,6 +13,7 @@ import pyaudio
 import wave
 import struct
 import librosa
+import argparse
 
 from train import Unet
 from mk_data import wave_to_spec, save_audio_file
@@ -66,10 +67,16 @@ def extract_voice_spec(net, mixed_mag, mixed_phase):
 
 if __name__ == "__main__":
 
+    # コマンドライン引数を受け取る
+    parser = argparse.ArgumentParser(description='Real time voice separation')
+    parser.add_argument('-r', '--record_time', default=None, help="Please specify record time[sec]")
+    args = parser.parse_args()
+
     # 使用するパラメータの設定
     N = 10
     CHUNK = 1024 * N # １度に処理する音声のサンプル数
     RATE = 16000 # サンプリングレート
+    FORMAT = pyaudio.paInt16
     CHANNELS = 1
     fft_size = 1024 # 高速フーリエ変換のフレームサイズ
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
@@ -93,43 +100,60 @@ if __name__ == "__main__":
 
     p = pyaudio.PyAudio()
 
-    stream = p.open(format = pyaudio.paInt16,
+    stream = p.open(format = FORMAT,
     		channels = CHANNELS,
     		rate = RATE,
     		frames_per_buffer = CHUNK,
     		input = True,
     		output = True) # inputとoutputを同時にTrueにする
 
-    # マイクで取得した音声に対して音源分離処理を行う
-    while stream.is_active():
-        print(audio_idx)
-        input = stream.read(CHUNK)
-        # input = voice_separate(input) # 音源分離処理を行う
-        data = np.frombuffer(input, dtype="int16") / 32768.0 # 量子化ビット数が16bitの場合の正規化
-        # マルチチャンネルで行う場合
-        # チェンネル1のデータはmultichannel_data[:, 0]、チャンネル2のデータはmultichannel_data[:, 1]...
-        # chunk_length = len(data) / CHANNELS
-        # multichannel_data = np.reshape(data, (chunk_length, CHANNELS))
-        # 音声データをスペクトログラムに変換
-        mixed_mag, mixed_phase = wave_to_spec(data, fft_size, hop_length) # wavをスペクトログラムへ
-        # マイクで取得した音声のスペクトログラムから人の声のスペクトログラムを抽出
-        voice_spec = extract_voice_spec(net, mixed_mag, mixed_phase)
-        # スペクトログラムを音声データに変換
-        masked_voice_data = spec_to_wav(voice_spec, hop_length)
-        # オーディオファイルとそのスペクトログラムを保存
-        masked_voice_path = "./output/test/masked_voice{}.wav".format(audio_idx)
-        save_audio_file(masked_voice_path, masked_voice_data, sampling_rate=RATE)
 
-        # data =[]
-        # data = np.frombuffer(input, dtype="int16") / 32768.0 # 量子化ビット数が16bitの場合の正規化
-        # write_wave(audio_idx, data, RATE, wave_dir) # 処理後の音声データをwavファイルとして保存
+    if args.record_time == None:
+        # マイクで取得した音声に対して音源分離処理を行う
+        while stream.is_active():
+            print(audio_idx)
+            input = stream.read(CHUNK)
+            # input = voice_separate(input) # 音源分離処理を行う
+            data = np.frombuffer(input, dtype="int16") / 32768.0 # 量子化ビット数が16bitの場合の正規化
+            # マルチチャンネルで行う場合
+            # チェンネル1のデータはmultichannel_data[:, 0]、チャンネル2のデータはmultichannel_data[:, 1]...
+            # chunk_length = len(data) / CHANNELS
+            # multichannel_data = np.reshape(data, (chunk_length, CHANNELS))
+            # 音声データをスペクトログラムに変換
+            mixed_mag, mixed_phase = wave_to_spec(data, fft_size, hop_length) # wavをスペクトログラムへ
+            # マイクで取得した音声のスペクトログラムから人の声のスペクトログラムを抽出
+            voice_spec = extract_voice_spec(net, mixed_mag, mixed_phase)
+            # スペクトログラムを音声データに変換
+            masked_voice_data = spec_to_wav(voice_spec, hop_length)
+            # 音声データを保存
+            masked_voice_path = "./output/test/masked_voice{}.wav".format(audio_idx)
+            save_audio_file(masked_voice_path, masked_voice_data, sampling_rate=RATE)
+            # data =[]
+            # data = np.frombuffer(input, dtype="int16") / 32768.0 # 量子化ビット数が16bitの場合の正規化
+            # write_wave(audio_idx, data, RATE, wave_dir) # 処理後の音声データをwavファイルとして保存
+            # output = stream.write(input)
+            audio_idx += 1
+    else:
+        # マイクで取得した音声に対して音源分離処理を行い、録音する
+        print("録音開始")
+        all_data = np.empty(0) # 音声データを格納するnumpyの空配列を用意
+        np.seterr(divide='ignore', invalid='ignore') # 録音開始時に出る警告を無視
+        for i in range(0, int(RATE / CHUNK * float(args.record_time))):
+            input = stream.read(CHUNK)
+            data = np.frombuffer(input, dtype="int16") / 32768.0 # 量子化ビット数が16bitの場合の正規化
+            # 音声データをスペクトログラムに変換
+            mixed_mag, mixed_phase = wave_to_spec(data, fft_size, hop_length) # wavをスペクトログラムへ
+            # マイクで取得した音声のスペクトログラムから人の声のスペクトログラムを抽出
+            voice_spec = extract_voice_spec(net, mixed_mag, mixed_phase)
+            # スペクトログラムを音声データに変換
+            masked_voice_data = spec_to_wav(voice_spec, hop_length)
+            all_data = np.append(all_data, masked_voice_data)
 
-        # output = stream.write(input)
+        print("{}秒間録音を行いました".format(str(args.record_time)))
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
 
-        audio_idx += 1
-
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-
-    print("Stop")
+        # wavファイルに保存
+        masked_voice_path = "./output/rec/record.wav"
+        save_audio_file(masked_voice_path, all_data, sampling_rate=RATE)
