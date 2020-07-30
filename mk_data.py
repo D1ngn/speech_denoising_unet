@@ -47,7 +47,7 @@ if __name__ == '__main__':
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
     audio_length = 5 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適化かも？
     voice_num_samples = 100 # 人の発話音声のファイル数
-    env_noise_num_samples = 10 # 環境音のファイル数
+    env_noise_num_samples = 200 # 環境音のファイル数
     train_val_ratio = 0.9 # trainデータとvalidationデータの割合
     fft_size = 1024 # 高速フーリエ変換のフレームサイズ
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長

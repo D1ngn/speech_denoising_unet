@@ -54,7 +54,17 @@ class NumpyToTensor():
 class Unet(nn.Module):
     def __init__(self):
         super(Unet, self).__init__()
-        # encoderの層
+        # # encoderの層
+        # self.encoder = nn.Sequential(
+        #     self.conv_0 = nn.Conv2d(1, 16, 4, stride=2, padding=1) # ２次元データの畳み込み演算を行う層　引数は入力のチャンネル数、出力のチャンネル数、カーネル(フィルタ)の大きさ
+        #     self.bn_0 = nn.BatchNorm2d(16) # batch normalizationを行う層　引数は入力データのチャンネル数
+        #     self.leaky_relu = nn.LeakyReLU(0.2, inplace=True) # inplace=Trueにすることで、使用メモリを削減
+        # )
+        # for i in range(5):
+        #     self.encoder.add_module("conv_{}".format(i+1), nn.Conv2d(16*(2**i), 16*(2**(i+1)), 4, stride=2, padding=1))
+        #     self.encoder.add_module("bn_{}".format(i+1), nn.BatchNorm2d(16*(2**i)))
+        #     self.encoder.add_module("leaky_relu", nn.LeakyReLU(0.2, inplace=True))
+
         self.conv1 = nn.Conv2d(1, 16, 4, stride=2, padding=1) # ２次元データの畳み込み演算を行う層　引数は入力のチャンネル数、出力のチャンネル数、カーネル(フィルタ)の大きさ
         self.norm1 = nn.BatchNorm2d(16) # batch normalizationを行う層　引数は入力データのチャンネル数
         self.conv2 = nn.Conv2d(16, 32, 4, stride=2, padding=1)
@@ -68,6 +78,12 @@ class Unet(nn.Module):
         self.conv6 = nn.Conv2d(256, 512, 4, stride=2, padding=1)
         self.norm6 = nn.BatchNorm2d(512)
         self.leaky_relu = nn.LeakyReLU(0.2, inplace=True) # inplace=Trueにすることで、使用メモリを削減
+
+        # self.decoder = nn.Sequential()
+        # for i in range(5):
+        #     self.decoder.add_module("deconv_{}".format(i), nn.ConvTranspose2d(512, 256, 4, stride=2, padding=1))
+
+
         # decoderの層
         self.deconv1 = nn.ConvTranspose2d(512, 256, 4, stride=2, padding=1)
         self.denorm1 = nn.BatchNorm2d(256)
@@ -147,7 +163,7 @@ class VoiceDataset(data.Dataset):
 
 
 # モデルを学習させる関数を作成
-def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path):
+def train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path):
 
     # GPUが使える場合あはGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -163,17 +179,14 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
     epoch_val_loss = 0.0
     logs = []
 
-    # 学習済みモデルのパラメータを保存するディレクトリを作成
-    os.makedirs(param_save_dir, exist_ok=True)
-
     # 学習を再開する場合はパラメータをロード、最初から始める場合は特に処理は行われない
     if checkpoint_path is not None:
-        start_epoch, net, optimizer, log_epoch = load_checkpoint(net, optimizer, checkpoint_path, device)
+        start_epoch, model, optimizer, log_epoch = load_checkpoint(model, optimizer, checkpoint_path, device)
     else:
         print("checkpointファイルがありません。最初から学習を開始します。")
 
     # ネットワークをGPUへ
-    net.to(device)
+    model.to(device)
 
     # epochごとのループ
     for epoch in range(start_epoch, num_epochs):
@@ -187,10 +200,10 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
         # モデルのモードを切り替える(学習 ⇔ 検証)
         for phase in ['train', 'val']:
             if phase == 'train':
-                net.train() # 学習モード
+                model.train() # 学習モード
             else:
                 if ((epoch+1) % 10 == 0): # 10回ごとに検証
-                    net.eval() # 検証モード
+                    model.eval() # 検証モード
                 else:
                     continue
 
@@ -204,7 +217,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
                 # 順伝播
                 with torch.set_grad_enabled(phase == 'train'):
                     # 混合音声のスペクトログラムをモデルに入力し、ノイズマスクを算出
-                    mask = net(mixed_spec)
+                    mask = model(mixed_spec)
                     # 損失を計算
                     loss = criterion(mask*mixed_spec, target_spec)
                     # 学習時は誤差逆伝播(バックプロパゲーション)
@@ -238,7 +251,8 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
         log_epoch = {'epoch': epoch+1, 'train_loss': epoch_train_loss, 'val_loss': epoch_val_loss}
         logs.append(log_epoch)
         df = pd.DataFrame(logs)
-        df.to_csv("log.csv")
+        log_save_path = os.path.join(param_save_dir, "log.csv")
+        df.to_csv(log_save_path)
 
         # epochごとの損失を初期化
         epoch_train_loss = 0.0
@@ -251,7 +265,7 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_s
             # 学習を再開できるように変更
             torch.save({
             'epoch': epoch+1,
-            'state_dict': net.state_dict(),
+            'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'log_epoch': log_epoch
             }, param_save_path)
@@ -268,7 +282,7 @@ if __name__ == '__main__':
     spec_freq_dim = 512 # スペクトログラムの周波数次元数
     spec_frame_num = 128 # スペクトログラムのフレーム数
     # モデルを作成
-    net = Unet()
+    model = Unet()
     # データセットを作成
     dataset_dir = "./data/voice1000_noise100/"
     train_mixed_spec_list, train_target_spec_list, val_mixed_spec_list, val_target_spec_list = mk_datapath_list(dataset_dir)
@@ -284,9 +298,11 @@ if __name__ == '__main__':
     # 損失関数を定義
     criterion = nn.L1Loss(reduction='sum') # L1Loss(input, target) : inputとtargetの各要素の差の絶対値の和
     # 最適化手法を定義
-    optimizer = optim.Adam(net.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
     # 各種設定 → いずれ１つのファイルからデータを読み込ませたい
     num_epochs = 300 # epoch数を指定
+    # 学習済みモデルのパラメータを保存するディレクトリを作成
     param_save_dir = "./ckpt" # 学習済みモデルのパラメータを保存するディレクトリのパスを指定
+    os.makedirs(param_save_dir, exist_ok=True)
     #　モデルを学習
-    train_model(net, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=args.checkpoint_path)
+    train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=args.checkpoint_path)

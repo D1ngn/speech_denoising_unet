@@ -56,23 +56,23 @@ if __name__ == '__main__':
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
 
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
-    checkpoint_path = "./ckpt/ckpt_epoch700.pt"
+    checkpoint_path = "./ckpt/ckpt_voice100_noise200_0729/ckpt_epoch300.pt"
     # ネットワークモデルを指定
-    net = Unet()
+    model = Unet()
     # GPUが使える場合はGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("使用デバイス：" , device)
     # 学習済みのパラメータをロード
-    net_params = torch.load(checkpoint_path, map_location=device)
-    net.load_state_dict(net_params['state_dict'])
+    model_params = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(model_params['model_state_dict'])
     # Unetを使って推論
     # ネットワークを推論モードへ
-    net.eval()
+    model.eval()
 
     # 分離処理の開始時間
     start_time = time.time()
     # 音声ファイルのパスを指定
-    original_audio_file = "./data/voice100_noise10/test/BASIC5000_0853_target.wav"
+    target_voice_file = "./data/voice100_noise10/test/BASIC5000_0853_target.wav"
     mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_0853_001_mixed.wav"
     # original_audio_file = "./data/voice100_noise10/test/BASIC5000_1222_target.wav"
     # mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_1222_007_mixed.wav"
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     # numpy形式のデータをpytorchのテンソルに変換
     mag_tensor = torch.from_numpy(mag_expanded)
     # 環境音のmaskを計算
-    mask = net(mag_tensor)
+    mask = model(mag_tensor)
     # pytorchのtensorをnumpy配列に変換
     mask = mask.detach().numpy()
     # 人の声を取り出す
@@ -106,10 +106,10 @@ if __name__ == '__main__':
     # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
     voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
     voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
-    masked_voice_data = spec_to_wav(voice_spec, hop_length)
+    predicted_voice_data = spec_to_wav(voice_spec, hop_length)
     # オーディオファイルとそのスペクトログラムを保存
-    masked_voice_path = "./output/wav/masked_voice.wav"
-    save_audio_file(masked_voice_path, masked_voice_data, sampling_rate=16000)
+    predicted_voice_path = "./output/wav/predicted_voice.wav"
+    save_audio_file(predicted_voice_path, predicted_voice_data, sampling_rate=16000)
     # 分離処理の終了時間
     finish_time = time.time()
     # 処理時間
@@ -118,24 +118,24 @@ if __name__ == '__main__':
 
     # デバッグ用に元のオーディオファイルとそのスペクトログラムを保存
     # オリジナル音声
-    original_voice_path = "./output/wav/original_voice.wav"
+    target_voice_path = "./output/wav/target_voice.wav"
     # cmd = "cp {} {}".format(original_audio_file, original_voice_path)
     # subprocess.call(cmd, shell=True)
-    original_audio_data = load_audio_file(original_audio_file, audio_length, sampling_rate)
-    save_audio_file(original_voice_path, original_audio_data, sampling_rate=16000)
+    target_voice_data = load_audio_file(target_voice_file, audio_length, sampling_rate)
+    save_audio_file(target_voice_path, target_voice_data, sampling_rate=16000)
     # 混合音声
-    mixed_voice_path = "./output/wav/mixed_voice.wav"
-    save_audio_file(mixed_voice_path, mixed_audio_data, sampling_rate=16000)
+    mixed_audio_path = "./output/wav/mixed_audio.wav"
+    save_audio_file(mixed_audio_path, mixed_audio_data, sampling_rate=16000)
 
     # オーディオファイルに対応するスペクトログラムを保存
     # 現在のディレクトリ位置を取得
     base_dir = os.getcwd()
     # オリジナル音声のスペクトログラム
-    original_voice_spec_path = "./output/spectrogram/original.png"
-    spec_plot(base_dir, original_audio_file, original_voice_spec_path)
+    target_voice_spec_path = "./output/spectrogram/target_voice.png"
+    spec_plot(base_dir, target_voice_file, target_voice_spec_path)
     # 分離音のスペクトログラム
-    masked_voice_spec_path = "./output/spectrogram/masked_voice.png"
-    spec_plot(base_dir, masked_voice_path, masked_voice_spec_path)
+    predicted_voice_spec_path = "./output/spectrogram/predicted_voice.png"
+    spec_plot(base_dir, predicted_voice_path, predicted_voice_spec_path)
     # 混合音声のスペクトログラム
-    mixed_voice_spec_path = "./output/spectrogram/mixed_voice.png"
-    spec_plot(base_dir, mixed_voice_path, mixed_voice_spec_path)
+    mixed_audio_spec_path = "./output/spectrogram/mixed_audio.png"
+    spec_plot(base_dir, mixed_audio_path, mixed_audio_spec_path)

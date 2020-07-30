@@ -14,6 +14,7 @@ import wave
 import struct
 import librosa
 import argparse
+import time
 
 from train import Unet
 from mk_data import wave_to_spec, save_audio_file
@@ -85,7 +86,8 @@ if __name__ == "__main__":
     os.makedirs(wave_dir, exist_ok=True)
 
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
-    checkpoint_path = "./ckpt/ckpt_epoch50.pt"
+    checkpoint_path = "./ckpt/ckpt_0509/ckpt_epoch700.pt"
+    # checkpoint_path = "./ckpt/ckpt_voice1000_0715/ckpt_epoch10.pt"
     # ネットワークモデルを指定
     net = Unet()
     # GPUが使える場合はGPUを使用、使えない場合はCPUを使用
@@ -119,12 +121,15 @@ if __name__ == "__main__":
             # チェンネル1のデータはmultichannel_data[:, 0]、チャンネル2のデータはmultichannel_data[:, 1]...
             # chunk_length = len(data) / CHANNELS
             # multichannel_data = np.reshape(data, (chunk_length, CHANNELS))
+            start_time = time.perf_counter()
             # 音声データをスペクトログラムに変換
             mixed_mag, mixed_phase = wave_to_spec(data, fft_size, hop_length) # wavをスペクトログラムへ
             # マイクで取得した音声のスペクトログラムから人の声のスペクトログラムを抽出
             voice_spec = extract_voice_spec(net, mixed_mag, mixed_phase)
             # スペクトログラムを音声データに変換
             masked_voice_data = spec_to_wav(voice_spec, hop_length)
+            finish_time = time.perf_counter()
+            print("処理時間：", finish_time - start_time)
             # 音声データを保存
             masked_voice_path = "./output/test/masked_voice{}.wav".format(audio_idx)
             save_audio_file(masked_voice_path, masked_voice_data, sampling_rate=RATE)

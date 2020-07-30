@@ -3,3 +3,4 @@ data/
 ckpt/
 output/
 log.csv
+wave_plot.py
