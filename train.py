@@ -202,10 +202,11 @@ def train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param
             if phase == 'train':
                 model.train() # 学習モード
             else:
-                if ((epoch+1) % 10 == 0): # 10回ごとに検証
-                    model.eval() # 検証モード
-                else:
-                    continue
+                model.eval() # 検証モード
+                # if ((epoch+1) % 10 == 0): # 10回ごとに検証
+                #     model.eval() # 検証モード
+                # else:
+                #     continue
 
             # データローダからミニバッチずつ取り出すループ
             for mixed_spec, target_spec in dataloaders_dict[phase]:
