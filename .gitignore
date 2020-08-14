@@ -4,3 +4,5 @@ ckpt/
 output/
 log.csv
 wave_plot.py
+train_old.py
+inference_old.py

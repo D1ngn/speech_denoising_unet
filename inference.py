@@ -13,10 +13,18 @@ import wave
 import subprocess
 import time
 
-
 from train import Unet
 from mk_data import load_audio_file, save_audio_file, wave_to_spec
+from wave_plot import wave_plot
 
+# 音声評価用
+import sys
+sys.path.append('..')
+from MyLibrary.MyFunc import audio_eval
+
+# モデルのパラメータ数をカウント
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 # スペクトログラムを音声データに変換する
 def spec_to_wav(spec, hop_length):
@@ -55,8 +63,24 @@ if __name__ == '__main__':
     fft_size = 1024 # 高速フーリエ変換のフレームサイズ
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
 
+    # 音声ファイルのパスを指定
+    # target_voice_file = "./data/voice100_noise10/test/BASIC5000_0853_target.wav"
+    # mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_0853_001_mixed.wav"
+    target_voice_file = "./data/voice100_noise200/test/BASIC5000_1734_target.wav"
+    interference_audio_file = "./data/voice100_noise200/test/BASIC5000_1734_002_noise.wav"
+    mixed_audio_file = "./data/voice100_noise200/test/BASIC5000_1734_002_mixed.wav"
+
+    wave_dir = "./output/wave/"
+    os.makedirs(wave_dir, exist_ok=True)
+    # オーディオファイルに対応する音声の波形を保存
+    wave_image_dir = "./output/wave_image/"
+    os.makedirs(wave_image_dir, exist_ok=True)
+    # オーディオファイルに対応するスペクトログラムを保存
+    spec_dir = "./output/spectrogram/"
+    os.makedirs(spec_dir, exist_ok=True)
+
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
-    checkpoint_path = "./ckpt/ckpt_voice100_noise200_0729/ckpt_epoch300.pt"
+    checkpoint_path = "./ckpt/ckpt_voice100_noise200_0806/ckpt_epoch200.pt"
     # ネットワークモデルを指定
     model = Unet()
     # GPUが使える場合はGPUを使用、使えない場合はCPUを使用
@@ -65,17 +89,13 @@ if __name__ == '__main__':
     # 学習済みのパラメータをロード
     model_params = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(model_params['model_state_dict'])
+    # print("モデルのパラメータ数：", count_parameters(model))
     # Unetを使って推論
     # ネットワークを推論モードへ
     model.eval()
 
     # 分離処理の開始時間
-    start_time = time.time()
-    # 音声ファイルのパスを指定
-    target_voice_file = "./data/voice100_noise10/test/BASIC5000_0853_target.wav"
-    mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_0853_001_mixed.wav"
-    # original_audio_file = "./data/voice100_noise10/test/BASIC5000_1222_target.wav"
-    # mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_1222_007_mixed.wav"
+    start_time = time.perf_counter()
     # 音声データをロード(現在は学習時と同じ処理をしているが、いずれはマイクロホンのリアルストリーミング音声を入力にしたい)
     mixed_audio_data = load_audio_file(mixed_audio_file, audio_length, sampling_rate)
     #　音声データをスペクトログラムに変換
@@ -106,36 +126,57 @@ if __name__ == '__main__':
     # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
     voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
     voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
-    predicted_voice_data = spec_to_wav(voice_spec, hop_length)
-    # オーディオファイルとそのスペクトログラムを保存
-    predicted_voice_path = "./output/wav/predicted_voice.wav"
-    save_audio_file(predicted_voice_path, predicted_voice_data, sampling_rate=16000)
+    estimated_voice_data = spec_to_wav(voice_spec, hop_length)
+    # オーディオデータを保存
+    estimated_voice_path = os.path.join(wave_dir, "estimated_voice.wav")
+    save_audio_file(estimated_voice_path, estimated_voice_data, sampling_rate=16000)
     # 分離処理の終了時間
-    finish_time = time.time()
+    finish_time = time.perf_counter()
     # 処理時間
     process_time = finish_time - start_time
     print("処理時間：", str(process_time) + 'sec')
-
     # デバッグ用に元のオーディオファイルとそのスペクトログラムを保存
     # オリジナル音声
-    target_voice_path = "./output/wav/target_voice.wav"
-    # cmd = "cp {} {}".format(original_audio_file, original_voice_path)
-    # subprocess.call(cmd, shell=True)
+    target_voice_path = os.path.join(wave_dir, "target_voice.wav")
     target_voice_data = load_audio_file(target_voice_file, audio_length, sampling_rate)
     save_audio_file(target_voice_path, target_voice_data, sampling_rate=16000)
+    # 外的雑音
+    interference_audio_path = os.path.join(wave_dir, "interference_audio.wav")
+    interference_audio_data = load_audio_file(interference_audio_file, audio_length, sampling_rate)
+    save_audio_file(interference_audio_path, interference_audio_data, sampling_rate=16000)
     # 混合音声
-    mixed_audio_path = "./output/wav/mixed_audio.wav"
+    mixed_audio_path = os.path.join(wave_dir, "mixed_audio.wav")
     save_audio_file(mixed_audio_path, mixed_audio_data, sampling_rate=16000)
 
-    # オーディオファイルに対応するスペクトログラムを保存
+    # 音声の波形を画像として保存
+    # オリジナル音声の波形
+    target_voice_img_path = os.path.join(wave_image_dir, "target_voice.png")
+    wave_plot(target_voice_path, target_voice_img_path)
+    # 外的雑音の波形
+    interference_img_path = os.path.join(wave_image_dir, "interference_audio.png")
+    wave_plot(interference_audio_path, interference_img_path)
+    # 分離音の波形
+    estimated_voice_img_path = os.path.join(wave_image_dir, "estimated_voice.png")
+    wave_plot(estimated_voice_path, estimated_voice_img_path)
+    # 混合音声の波形
+    mixed_audio_img_path = os.path.join(wave_image_dir, "mixed_audio.png")
+    wave_plot(mixed_audio_path, mixed_audio_img_path)
+
+    # スペクトログラムを画像として保存
     # 現在のディレクトリ位置を取得
     base_dir = os.getcwd()
     # オリジナル音声のスペクトログラム
-    target_voice_spec_path = "./output/spectrogram/target_voice.png"
-    spec_plot(base_dir, target_voice_file, target_voice_spec_path)
+    target_voice_spec_path = os.path.join(spec_dir, "target_voice.png")
+    spec_plot(base_dir, target_voice_path, target_voice_spec_path)
+    # 外的雑音のスペクトログラム
+    interference_audio_spec_path = os.path.join(spec_dir, "interference_audio.png")
+    spec_plot(base_dir, interference_audio_path, interference_audio_spec_path)
     # 分離音のスペクトログラム
-    predicted_voice_spec_path = "./output/spectrogram/predicted_voice.png"
-    spec_plot(base_dir, predicted_voice_path, predicted_voice_spec_path)
+    estimated_voice_spec_path = os.path.join(spec_dir, "estimated_voice.png")
+    spec_plot(base_dir, estimated_voice_path, estimated_voice_spec_path)
     # 混合音声のスペクトログラム
-    mixed_audio_spec_path = "./output/spectrogram/mixed_audio.png"
+    mixed_audio_spec_path = os.path.join(spec_dir, "mixed_audio.png")
     spec_plot(base_dir, mixed_audio_path, mixed_audio_spec_path)
+
+    # 音声評価
+    audio_eval(audio_length, target_voice_path, interference_audio_path, mixed_audio_path, estimated_voice_path)

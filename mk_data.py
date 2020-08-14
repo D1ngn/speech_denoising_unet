@@ -82,7 +82,7 @@ if __name__ == '__main__':
     train_data_path = os.path.join(save_dataset_dir, "train")
     os.makedirs(train_data_path, exist_ok=True)
     for voice_path in tqdm(voice_list_for_train):
-        voice_file_name = voice_path.split('/')[-1] # (例)BASIC5000_0001.wav
+        voice_file_name = os.path.basename(voice_path) # (例)BASIC5000_0001.wav
         target_file_name = voice_file_name.split('.')[0] + "_target.npy" # (例)BASIC5000_0001_target.npy
         voice_data = load_audio_file(voice_path, audio_length, sampling_rate)
         # オーディオデータをスペクトログラムに変換
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     val_data_path = os.path.join(save_dataset_dir, "val")
     os.makedirs(val_data_path, exist_ok=True)
     for voice_path in tqdm(voice_list_for_val):
-        voice_file_name = voice_path.split('/')[-1] # (例)BASIC5000_0001.wav
+        voice_file_name = os.path.basename(voice_path) # (例)BASIC5000_0001.wav
         target_file_name = voice_file_name.split('.')[0] + "_target.npy" # (例)BASIC5000_0001_target.npy
         voice_data = load_audio_file(voice_path, audio_length, sampling_rate)
         # オーディオデータをスペクトログラムに変換
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     test_data_path = os.path.join(save_dataset_dir, "test")
     os.makedirs(test_data_path, exist_ok=True)
     for voice_path in tqdm(voice_list_for_test):
-        voice_file_name = voice_path.split('/')[-1] # BASIC5000_0001.wav
+        voice_file_name = os.path.basename(voice_path) # BASIC5000_0001.wav
         target_file_name = voice_file_name.split('.')[0] + "_target.wav" # BASIC5000_0001_target.wav
         voice_data = load_audio_file(voice_path, audio_length, sampling_rate)
         # 元の音声データのサンプリング周波数を指定して保存
@@ -160,5 +160,9 @@ if __name__ == '__main__':
             # 混合した音声データのサンプリング周波数を指定して保存
             mixed_file_path = os.path.join(test_data_path, mixed_file_name)
             save_audio_file(mixed_file_path, mixed_audio_data, sampling_rate)
+            # 元の雑音データも保存
+            noise_file_name = voice_file_name.split('.')[0] + "_" + noise_idx + "_noise.wav"
+            noise_file_path = os.path.join(test_data_path, noise_file_name)
+            save_audio_file(noise_file_path, env_noise_data, sampling_rate)
 
     print("データ作成完了　保存先：{}".format(save_dataset_dir))
