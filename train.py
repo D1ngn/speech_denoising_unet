@@ -15,6 +15,7 @@ import argparse
 import pandas as pd
 import glob
 import pickle as pl
+import datetime
 
 
 # データの前処理を行うクラス
@@ -190,7 +191,7 @@ def train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("使用デバイス：" , device)
 
-    # ネットワークがある程度固定であれば、高速化させる
+    # モデルがある程度固定(イテレーションごとの入力サイズが一定)であれば、高速化させる
     torch.backends.cudnn.benchmark = True
 
     # 各カウンタを初期化
@@ -209,6 +210,15 @@ def train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param
     # ネットワークをGPUへ
     model.to(device)
 
+    # 学習データと検証データの数、バッチサイズを取得
+    num_train_data = len(dataloaders_dict['train'].dataset)
+    num_val_data = len(dataloaders_dict['val'].dataset)
+    batch_size = dataloaders_dict['train'].batch_size
+
+    print("num_train_data:", num_train_data)
+    print("num_val_data:", num_val_data)
+    print("batch_size:", batch_size)
+
     # epochごとのループ
     for epoch in range(start_epoch, num_epochs):
 
@@ -224,10 +234,6 @@ def train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param
                 model.train() # 学習モード
             else:
                 model.eval() # 検証モード
-                # if ((epoch+1) % 10 == 0): # 10回ごとに検証
-                #     model.eval() # 検証モード
-                # else:
-                #     continue
 
             # データローダからミニバッチずつ取り出すループ
             for mixed_spec, target_spec in dataloaders_dict[phase]:
@@ -253,7 +259,7 @@ def train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param
                             iter_finish_time = time.time()
                             duration_per_ten_iter = iter_finish_time - iter_start_time
                             # 0次元のテンソルから値を取り出す場合は「.item()」を使う
-                            print("イテレーション {} | Loss:{:.4f} | 経過時間:{:.4f}[sec]".format(iteration, loss.item(), duration_per_ten_iter))
+                            print("イテレーション {} | Loss:{:.4f} | 経過時間:{:.4f}[sec]".format(iteration, loss.item()/batch_size, duration_per_ten_iter))
                             epoch_train_loss += loss.item()
 
                         epoch_train_loss += loss.item()
@@ -266,15 +272,20 @@ def train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param
         epoch_finish_time = time.time()
         duration_per_epoch = epoch_finish_time - epoch_start_time
         print("=" * 30)
-        print("エポック {} | Epoch train Loss:{:.4f} | Epoch val Loss:{:.4f}".format(epoch+1, epoch_train_loss, epoch_val_loss))
+        print("エポック {} | Epoch train Loss:{:.4f} | Epoch val Loss:{:.4f}".format(epoch+1, epoch_train_loss/num_train_data, epoch_val_loss/num_val_data))
         print("経過時間:{:.4f}[sec/epoch]".format(duration_per_epoch))
 
         # 学習経過を分析できるようにcsvファイルにログを保存 → tensorboardに変更しても良いかも
-        log_epoch = {'epoch': epoch+1, 'train_loss': epoch_train_loss, 'val_loss': epoch_val_loss}
+        log_epoch = {'epoch': epoch+1, 'train_loss': epoch_train_loss/num_train_data, 'val_loss': epoch_val_loss/num_val_data}
         logs.append(log_epoch)
         df = pd.DataFrame(logs)
         log_save_path = os.path.join(param_save_dir, "log.csv")
         df.to_csv(log_save_path)
+
+        # エポックごとのタイムログをファイルに追記
+        time_log = os.path.join(param_save_dir, "time_log.txt")
+        with open(time_log, mode='a') as f:
+            f.write("エポック {} | {}\n".format(epoch+1, datetime.datetime.now()))
 
         # epochごとの損失を初期化
         epoch_train_loss = 0.0
@@ -300,13 +311,13 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint_path', default=None, help="checkpoint path if you restart training")
     args = parser.parse_args()
     # 各パラメータを設定
-    batch_size = 64 # バッチサイズ
+    batch_size = 2 # バッチサイズ
     spec_freq_dim = 512 # スペクトログラムの周波数次元数
-    spec_frame_num = 128 # スペクトログラムのフレーム数
+    spec_frame_num = 64 # スペクトログラムのフレーム数 spec_freq_dim=512のとき、音声の長さが5秒の場合は128, 3秒の場合は64
     # モデルを作成
     model = Unet()
     # データセットを作成
-    dataset_dir = "./data/voice1000_noise100/"
+    dataset_dir = "./data/voice100_noise100_3sec/"
     train_mixed_spec_list, train_target_spec_list, val_mixed_spec_list, val_target_spec_list = mk_datapath_list(dataset_dir)
     # 前処理クラスのインスタンスを作成
     transform = NumpyToTensor(spec_freq_dim, spec_frame_num) # numpy形式のスペクトログラムをpytorchのテンソルに変換する
@@ -324,7 +335,7 @@ if __name__ == '__main__':
     # 各種設定 → いずれ１つのファイルからデータを読み込ませたい
     num_epochs = 300 # epoch数を指定
     # 学習済みモデルのパラメータを保存するディレクトリを作成
-    param_save_dir = "./ckpt" # 学習済みモデルのパラメータを保存するディレクトリのパスを指定
+    param_save_dir = "./ckpt/ckpt_voice100_noise100_3sec_0815" # 学習済みモデルのパラメータを保存するディレクトリのパスを指定
     os.makedirs(param_save_dir, exist_ok=True)
     #　モデルを学習
     train_model(model, dataloaders_dict, criterion, optimizer, num_epochs, param_save_dir, checkpoint_path=args.checkpoint_path)

@@ -15,12 +15,11 @@ import time
 
 from train import Unet
 from mk_data import load_audio_file, save_audio_file, wave_to_spec
-from wave_plot import wave_plot
 
 # 音声評価用
 import sys
 sys.path.append('..')
-from MyLibrary.MyFunc import audio_eval
+from MyLibrary.MyFunc import wave_plot, audio_eval
 
 # モデルのパラメータ数をカウント
 def count_parameters(model):
@@ -46,9 +45,9 @@ def spec_plot_old(input_spec, save_path):
     plt.savefig(save_path)
 
 # スペクトログラムを図にプロットする関数
-def spec_plot(base_dir, wav_path, save_path):
+def spec_plot(base_dir, wav_path, save_path, audio_length):
     # soxコマンドによりwavファイルからスペクトログラムの画像を生成
-    cmd1 = "sox {} -n trim 0 5 rate 16.0k spectrogram".format(wav_path)
+    cmd1 = "sox {} -n trim 0 {} rate 16.0k spectrogram".format(wav_path, audio_length)
     subprocess.call(cmd1, shell=True)
     # 生成されたスペクトログラム画像を移動
     #(inference.pyを実行したディレクトリにスペクトログラムが生成されてしまうため)
@@ -59,16 +58,25 @@ def spec_plot(base_dir, wav_path, save_path):
 if __name__ == '__main__':
 
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
-    audio_length = 5 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適かも？
+    audio_length = 3 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適かも？
     fft_size = 1024 # 高速フーリエ変換のフレームサイズ
     hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
+    spec_frame_num = 64 # スペクトログラムのフレーム数 spec_freq_dim=512のとき、音声の長さが5秒の場合は128, 3秒の場合は64
 
     # 音声ファイルのパスを指定
     # target_voice_file = "./data/voice100_noise10/test/BASIC5000_0853_target.wav"
     # mixed_audio_file = "./data/voice100_noise10/test/BASIC5000_0853_001_mixed.wav"
-    target_voice_file = "./data/voice100_noise200/test/BASIC5000_1734_target.wav"
-    interference_audio_file = "./data/voice100_noise200/test/BASIC5000_1734_002_noise.wav"
-    mixed_audio_file = "./data/voice100_noise200/test/BASIC5000_1734_002_mixed.wav"
+    # target_voice_file = "./data/voice100_noise200/test/BASIC5000_1734_target.wav"
+    # interference_audio_file = "./data/voice100_noise200/test/BASIC5000_1734_002_noise.wav"
+    # mixed_audio_file = "./data/voice100_noise200/test/BASIC5000_1734_002_mixed.wav"
+
+    # target_voice_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_target.wav"
+    # interference_audio_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_004_noise.wav"
+    # mixed_audio_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_004_mixed.wav"
+
+    target_voice_file = "../AudioDatasets/NoisySpeechDetabase/clean_testset_wav_16kHz/p257_013.wav"
+    interference_audio_file = "../AudioDatasets/NoisySpeechDetabase/interference_testset_wav_16kHz/p257_013.wav"
+    mixed_audio_file = "../AudioDatasets/NoisySpeechDetabase/noisy_testset_wav_16kHz/p257_013.wav"
 
     wave_dir = "./output/wave/"
     os.makedirs(wave_dir, exist_ok=True)
@@ -80,7 +88,9 @@ if __name__ == '__main__':
     os.makedirs(spec_dir, exist_ok=True)
 
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
-    checkpoint_path = "./ckpt/ckpt_voice100_noise200_0806/ckpt_epoch200.pt"
+    # checkpoint_path = "./ckpt/ckpt_voice100_noise200_0806/ckpt_epoch200.pt"
+    # checkpoint_path = "./ckpt/ckpt_voice100_noise100_3sec_0819/ckpt_epoch30.pt"
+    checkpoint_path = "./ckpt/ckpt_NoisySpeechDataset_0820/ckpt_epoch180.pt"
     # ネットワークモデルを指定
     model = Unet()
     # GPUが使える場合はGPUを使用、使えない場合はCPUを使用
@@ -108,8 +118,8 @@ if __name__ == '__main__':
     mag_sliced = normed_mixed_mag[1:, :]
     phase_sliced = mixed_phase[1:, :]
     # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
-    mag_padded = np.pad(mag_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
-    phase_padded = np.pad(phase_sliced, [(0, 0), (0, 128 - mixed_mag.shape[1])], 'constant')
+    mag_padded = np.pad(mag_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
+    phase_padded = np.pad(phase_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
     # 0次元目と1次元目に次元を追加
     mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :] # shape:(1, 1, 512, 128)
     phase_expanded = phase_padded[np.newaxis, np.newaxis, :, :]
@@ -151,32 +161,34 @@ if __name__ == '__main__':
     # 音声の波形を画像として保存
     # オリジナル音声の波形
     target_voice_img_path = os.path.join(wave_image_dir, "target_voice.png")
-    wave_plot(target_voice_path, target_voice_img_path)
+    wave_plot(target_voice_path, target_voice_img_path, audio_length)
     # 外的雑音の波形
     interference_img_path = os.path.join(wave_image_dir, "interference_audio.png")
-    wave_plot(interference_audio_path, interference_img_path)
+    wave_plot(interference_audio_path, interference_img_path, audio_length)
     # 分離音の波形
     estimated_voice_img_path = os.path.join(wave_image_dir, "estimated_voice.png")
-    wave_plot(estimated_voice_path, estimated_voice_img_path)
+    wave_plot(estimated_voice_path, estimated_voice_img_path, audio_length)
     # 混合音声の波形
     mixed_audio_img_path = os.path.join(wave_image_dir, "mixed_audio.png")
-    wave_plot(mixed_audio_path, mixed_audio_img_path)
+    wave_plot(mixed_audio_path, mixed_audio_img_path, audio_length)
 
     # スペクトログラムを画像として保存
     # 現在のディレクトリ位置を取得
     base_dir = os.getcwd()
     # オリジナル音声のスペクトログラム
     target_voice_spec_path = os.path.join(spec_dir, "target_voice.png")
-    spec_plot(base_dir, target_voice_path, target_voice_spec_path)
+    spec_plot(base_dir, target_voice_path, target_voice_spec_path, audio_length)
     # 外的雑音のスペクトログラム
     interference_audio_spec_path = os.path.join(spec_dir, "interference_audio.png")
-    spec_plot(base_dir, interference_audio_path, interference_audio_spec_path)
+    spec_plot(base_dir, interference_audio_path, interference_audio_spec_path, audio_length)
     # 分離音のスペクトログラム
     estimated_voice_spec_path = os.path.join(spec_dir, "estimated_voice.png")
-    spec_plot(base_dir, estimated_voice_path, estimated_voice_spec_path)
+    spec_plot(base_dir, estimated_voice_path, estimated_voice_spec_path, audio_length)
     # 混合音声のスペクトログラム
     mixed_audio_spec_path = os.path.join(spec_dir, "mixed_audio.png")
-    spec_plot(base_dir, mixed_audio_path, mixed_audio_spec_path)
+    spec_plot(base_dir, mixed_audio_path, mixed_audio_spec_path, audio_length)
 
     # 音声評価
-    audio_eval(audio_length, target_voice_path, interference_audio_path, mixed_audio_path, estimated_voice_path)
+    sdr_mix, sir_mix, sar_mix, sdr_est, sir_est, sar_est = audio_eval(audio_length, target_voice_path, interference_audio_path, mixed_audio_path, estimated_voice_path)
+    print("SDR_mix: {:.3f}, SIR_mix: {:.3f}, SAR_mix: {:.3f}".format(sdr_mix, sir_mix, sar_mix))
+    print("SDR_est: {:.3f}, SIR_est: {:.3f}, SAR_est: {:.3f}".format(sdr_est, sir_est, sar_est))
