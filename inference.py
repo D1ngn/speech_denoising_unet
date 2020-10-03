@@ -13,7 +13,8 @@ import wave
 import subprocess
 import time
 
-from train import Unet
+# from train import Unet
+from models import Unet_kernel3
 from mk_data import load_audio_file, save_audio_file, wave_to_spec
 
 # 音声評価用
@@ -59,8 +60,8 @@ if __name__ == '__main__':
 
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
     audio_length = 3 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適かも？
-    fft_size = 1024 # 高速フーリエ変換のフレームサイズ
-    hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
+    fft_size = 512 # 高速フーリエ変換のフレームサイズ
+    hop_length = 160 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
     spec_frame_num = 64 # スペクトログラムのフレーム数 spec_freq_dim=512のとき、音声の長さが5秒の場合は128, 3秒の場合は64
 
     # 音声ファイルのパスを指定
@@ -71,12 +72,16 @@ if __name__ == '__main__':
     # mixed_audio_file = "./data/voice100_noise200/test/BASIC5000_1734_002_mixed.wav"
 
     # target_voice_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_target.wav"
-    # interference_audio_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_004_noise.wav"
-    # mixed_audio_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_004_mixed.wav"
+    # interference_audio_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_008_noise.wav"
+    # mixed_audio_file = "./data/voice100_noise100_3sec/test/BASIC5000_2009_008_mixed.wav"
 
-    target_voice_file = "../AudioDatasets/NoisySpeechDetabase/clean_testset_wav_16kHz/p257_013.wav"
-    interference_audio_file = "../AudioDatasets/NoisySpeechDetabase/interference_testset_wav_16kHz/p257_013.wav"
-    mixed_audio_file = "../AudioDatasets/NoisySpeechDetabase/noisy_testset_wav_16kHz/p257_013.wav"
+    # target_voice_file = "../AudioDatasets/NoisySpeechdatabase/clean_testset_wav_16kHz/p232_013.wav"
+    # interference_audio_file = "../AudioDatasets/NoisySpeechdatabase/interference_testset_wav_16kHz/p232_013.wav"
+    # mixed_audio_file = "../AudioDatasets/NoisySpeechdatabase/noisy_testset_wav_16kHz/p232_013.wav"
+
+    target_voice_file = "../AudioDatasets/NoisySpeechDatabase/clean_testset_wav_16kHz/p257_426.wav"
+    interference_audio_file = "../AudioDatasets/NoisySpeechDatabase/interference_testset_wav_16kHz/p257_426.wav"
+    mixed_audio_file = "../AudioDatasets/NoisySpeechDatabase/noisy_testset_wav_16kHz/p257_426.wav"
 
     wave_dir = "./output/wave/"
     os.makedirs(wave_dir, exist_ok=True)
@@ -90,9 +95,9 @@ if __name__ == '__main__':
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
     # checkpoint_path = "./ckpt/ckpt_voice100_noise200_0806/ckpt_epoch200.pt"
     # checkpoint_path = "./ckpt/ckpt_voice100_noise100_3sec_0819/ckpt_epoch30.pt"
-    checkpoint_path = "./ckpt/ckpt_NoisySpeechDataset_0820/ckpt_epoch180.pt"
+    checkpoint_path = "./ckpt/ckpt_NoisySpeechDataset_fft_512_kernel3_0923/ckpt_epoch280.pt"
     # ネットワークモデルを指定
-    model = Unet()
+    model = Unet_kernel3()
     # GPUが使える場合はGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("使用デバイス：" , device)
@@ -114,28 +119,40 @@ if __name__ == '__main__':
     max_mag = mixed_mag.max()
     normed_mixed_mag = mixed_mag / max_mag
     # データの形式をモデルに入力できる形式に変更する
-    # librosaを使って、スペクトログラムを算出すると周波数要素が513になるので、512にスライス
-    mag_sliced = normed_mixed_mag[1:, :]
-    phase_sliced = mixed_phase[1:, :]
-    # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
-    mag_padded = np.pad(mag_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
-    phase_padded = np.pad(phase_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
+    # # librosaを使って、スペクトログラムを算出すると周波数要素が513になるので、512にスライス
+    # mag_sliced = normed_mixed_mag[:int(fft_size/2), :]
+    # phase_sliced = mixed_phase[:int(fft_size/2), :]
+    # # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
+    # mag_padded = np.pad(mag_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
+    # phase_padded = np.pad(phase_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
+    # カーネル3×3版
+    mag_padded = np.pad(normed_mixed_mag, [(0, 0), (0, 513-normed_mixed_mag.shape[1])], 'constant')
+    """mag_padded: (257, 513)"""
+    phase_padded = np.pad(mixed_phase, [(0, 0), (0, 513-mixed_phase.shape[1])], 'constant')
+    """phase_padded: (257, 513)"""
     # 0次元目と1次元目に次元を追加
-    mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :] # shape:(1, 1, 512, 128)
+    mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :]
+    """mag_padded: (1, 1, 257, 513)"""
     phase_expanded = phase_padded[np.newaxis, np.newaxis, :, :]
+    """phase_expanded: (1, 1, 257, 513)"""
     # numpy形式のデータをpytorchのテンソルに変換
-    mag_tensor = torch.from_numpy(mag_expanded)
+    mag_tensor = torch.from_numpy(mag_expanded.astype(np.float32)).clone()
     # 環境音のmaskを計算
     mask = model(mag_tensor)
     # pytorchのtensorをnumpy配列に変換
-    mask = mask.detach().numpy()
+    mask = mask.to(device).detach().numpy().copy()
     # 人の声を取り出す
     normed_separated_voice_mag = mask * mag_expanded
     # 正規化によって小さくなった音量を元に戻す
     separated_voice_mag = normed_separated_voice_mag * max_mag
     # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
-    voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
-    voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
+    voice_spec = separated_voice_mag * phase_expanded
+    """voice_spec: (batch_size=1, channels=1, freq_bins=257, time_steps=513)"""
+    voice_spec = np.squeeze(voice_spec)
+    """voice_spec: (freq_bins=257, time_steps=513)"""
+    # paddingした分を元に戻す
+    voice_spec = voice_spec[:, :normed_mixed_mag.shape[1]]
+    """voice_spec: (freq_bins=257, time_steps=301)"""
     estimated_voice_data = spec_to_wav(voice_spec, hop_length)
     # オーディオデータを保存
     estimated_voice_path = os.path.join(wave_dir, "estimated_voice.wav")
@@ -161,16 +178,16 @@ if __name__ == '__main__':
     # 音声の波形を画像として保存
     # オリジナル音声の波形
     target_voice_img_path = os.path.join(wave_image_dir, "target_voice.png")
-    wave_plot(target_voice_path, target_voice_img_path, audio_length)
+    wave_plot(target_voice_path, target_voice_img_path, audio_length, ylim_min=-1.0, ylim_max=1.0)
     # 外的雑音の波形
     interference_img_path = os.path.join(wave_image_dir, "interference_audio.png")
-    wave_plot(interference_audio_path, interference_img_path, audio_length)
+    wave_plot(interference_audio_path, interference_img_path, audio_length, ylim_min=-1.0, ylim_max=1.0)
     # 分離音の波形
     estimated_voice_img_path = os.path.join(wave_image_dir, "estimated_voice.png")
-    wave_plot(estimated_voice_path, estimated_voice_img_path, audio_length)
+    wave_plot(estimated_voice_path, estimated_voice_img_path, audio_length, ylim_min=-1.0, ylim_max=1.0)
     # 混合音声の波形
     mixed_audio_img_path = os.path.join(wave_image_dir, "mixed_audio.png")
-    wave_plot(mixed_audio_path, mixed_audio_img_path, audio_length)
+    wave_plot(mixed_audio_path, mixed_audio_img_path, audio_length, ylim_min=-1.0, ylim_max=1.0)
 
     # スペクトログラムを画像として保存
     # 現在のディレクトリ位置を取得

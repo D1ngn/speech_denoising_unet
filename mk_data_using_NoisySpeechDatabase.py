@@ -46,22 +46,22 @@ if __name__ == '__main__':
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
     audio_length = 3 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適化かも？
     train_val_ratio = 0.9 # trainデータとvalidationデータの割合
-    fft_size = 1024 # 高速フーリエ変換のフレームサイズ
-    hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
+    fft_size = 512 # 高速フーリエ変換のフレームサイズ
+    hop_length = 160 # 高速フーリエ変換においてフレームをスライドさせる幅
 
     # 乱数を初期化
     random.seed(0)
 
     # データセットを格納するディレクトリを作成
-    save_dataset_dir = "./data/NoisySpeechDataset_for_unet/"
+    save_dataset_dir = "./data/NoisySpeechDataset_for_unet_fft_512/"
     os.makedirs(save_dataset_dir, exist_ok=True)
 
     # 人の発話音声のディレクトリを指定
-    target_data_dir = "../AudioDatasets/NoisySpeechDetabase/clean_trainset_28spk_wav_16kHz/"
+    target_data_dir = "../AudioDatasets/NoisySpeechdatabase/clean_trainset_28spk_wav_16kHz/"
     # 外部雑音のディレクトリを指定
-    interference_data_dir = "../AudioDatasets/NoisySpeechDetabase/interference_trainset_wav_16kHz/"
+    interference_data_dir = "../AudioDatasets/NoisySpeechdatabase/interference_trainset_wav_16kHz/"
     # 混合音声のディレクトリを指定
-    mixed_data_dir = "../AudioDatasets/NoisySpeechDetabase/noisy_trainset_28spk_wav_16kHz/"
+    mixed_data_dir = "../AudioDatasets/NoisySpeechdatabase/noisy_trainset_28spk_wav_16kHz/"
 
     target_data_path_template = os.path.join(target_data_dir, "*.wav")
     target_list = glob.glob(target_data_path_template)

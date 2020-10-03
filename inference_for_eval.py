@@ -16,7 +16,8 @@ import time
 
 from natsort import natsorted
 from tqdm import tqdm
-from train import Unet
+# from train import Unet
+from models import Unet_kernel3
 from mk_data import load_audio_file, save_audio_file, wave_to_spec
 
 # 音声評価用
@@ -62,14 +63,14 @@ if __name__ == '__main__':
 
     sampling_rate = 16000 # 作成するオーディオファイルのサンプリング周波数を指定
     audio_length = 3 # 単位は秒(second) → fft_size=1024,hop_length=768のとき、audio_length=6が最適かも？
-    fft_size = 1024 # 高速フーリエ変換のフレームサイズ
-    hop_length = 768 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
+    fft_size = 512 # 高速フーリエ変換のフレームサイズ
+    hop_length = 160 # 高速フーリエ変換におけるフレーム間のオーバーラップ長
     spec_frame_num = 64 # スペクトログラムのフレーム数 spec_freq_dim=512のとき、音声の長さが5秒の場合は128, 3秒の場合は64
 
     # 音声ファイルのディレクトリを指定
-    target_voice_dir = "../AudioDatasets/NoisySpeechDetabase/clean_testset_wav_16kHz/"
-    interference_audio_dir = "../AudioDatasets/NoisySpeechDetabase/interference_testset_wav_16kHz/"
-    mixed_audio_dir = "../AudioDatasets/NoisySpeechDetabase/noisy_testset_wav_16kHz/"
+    target_voice_dir = "../AudioDatasets/NoisySpeechdatabase/clean_testset_wav_16kHz/"
+    interference_audio_dir = "../AudioDatasets/NoisySpeechdatabase/interference_testset_wav_16kHz/"
+    mixed_audio_dir = "../AudioDatasets/NoisySpeechdatabase/noisy_testset_wav_16kHz/"
 
     target_voice_path_list = natsorted(glob.glob(os.path.join(target_voice_dir, "*.wav")))
     interference_audio_path_list = natsorted(glob.glob(os.path.join(interference_audio_dir, "*.wav")))
@@ -88,9 +89,9 @@ if __name__ == '__main__':
     # 学習済みのパラメータを保存したチェックポイントファイルのパスを指定
     # checkpoint_path = "./ckpt/ckpt_voice100_noise200_0806/ckpt_epoch200.pt"
     # checkpoint_path = "./ckpt/ckpt_voice100_noise100_3sec_0819/ckpt_epoch30.pt"
-    checkpoint_path = "./ckpt/ckpt_NoisySpeechDataset_0820/ckpt_epoch180.pt"
+    checkpoint_path = "./ckpt/ckpt_NoisySpeechDataset_fft_512_kernel3_0923/ckpt_epoch280.pt"
     # ネットワークモデルを指定
-    model = Unet()
+    model = Unet_kernel3()
     # GPUが使える場合はGPUを使用、使えない場合はCPUを使用
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("使用デバイス：" , device)
@@ -122,20 +123,25 @@ if __name__ == '__main__':
         normed_mixed_mag = mixed_mag / max_mag
         # データの形式をモデルに入力できる形式に変更する
         # librosaを使って、スペクトログラムを算出すると周波数要素が513になるので、512にスライス
-        mag_sliced = normed_mixed_mag[1:, :]
-        phase_sliced = mixed_phase[1:, :]
+        # mag_sliced = normed_mixed_mag[:int(fft_size/2), :]
+        # phase_sliced = mixed_phase[:int(fft_size/2), :]
         # モデルの入力サイズに合わせて、スペクトログラムの後ろの部分を0埋め(パディング)
-        mag_padded = np.pad(mag_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
-        phase_padded = np.pad(phase_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
+        mag_padded = np.pad(normed_mixed_mag, [(0, 0), (0, 513-normed_mixed_mag.shape[1])], 'constant')
+        phase_padded = np.pad(mixed_phase, [(0, 0), (0, 513-mixed_phase.shape[1])], 'constant')
+        # mag_padded = np.pad(mag_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
+        # phase_padded = np.pad(phase_sliced, [(0, 0), (0, spec_frame_num - mixed_mag.shape[1])], 'constant')
+        # 512padding版
+        # mag_padded = np.pad(normed_mixed_mag, [(0, 512-normed_mixed_mag.shape[0]), (0, 512 - normed_mixed_mag.shape[1])], 'constant')
+        # phase_padded = np.pad(mixed_phase, [(0, 512-mixed_phase.shape[0]), (0, 512 - mixed_phase.shape[1])], 'constant')
         # 0次元目と1次元目に次元を追加
         mag_expanded = mag_padded[np.newaxis, np.newaxis, :, :] # shape:(1, 1, 512, 128)
         phase_expanded = phase_padded[np.newaxis, np.newaxis, :, :]
         # numpy形式のデータをpytorchのテンソルに変換
-        mag_tensor = torch.from_numpy(mag_expanded)
+        mag_tensor = torch.from_numpy(mag_expanded).float()
         # 環境音のmaskを計算
         mask = model(mag_tensor)
         # pytorchのtensorをnumpy配列に変換
-        mask = mask.detach().numpy()
+        mask = mask.datach().numpy()
         # 人の声を取り出す
         normed_separated_voice_mag = mask * mag_expanded
         # 正規化によって小さくなった音量を元に戻す
@@ -143,6 +149,8 @@ if __name__ == '__main__':
         # マスクした後の振幅スペクトログラムに入力音声の位相スペクトログラムを掛け合わせて音声を復元
         voice_spec = separated_voice_mag * phase_expanded  # shape:(1, 1, 512, 128)
         voice_spec = np.squeeze(voice_spec) # shape:(512, 128)
+        # paddingした分を元に戻す
+        voice_spec = voice_spec[:, :normed_mixed_mag.shape[1]]
         estimated_voice_data = spec_to_wav(voice_spec, hop_length)
         # オーディオデータを保存
         estimated_voice_path = "./estimated_voice.wav"

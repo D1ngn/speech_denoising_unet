@@ -17,13 +17,6 @@ import glob
 import pickle as pl
 import datetime
 
-from models import Unet_kernel3
-
-# PyTorch 以外のRNGを初期化
-# random.seed(0)
-np.random.seed(0)
-# PyTorch のRNGを初期化
-torch.manual_seed(0)
 
 # データの前処理を行うクラス
 class NumpyToTensor():
@@ -65,94 +58,94 @@ class VoiceDataset(data.Dataset):
 
         return mixed_spec, target_spec
 
-# # Unetのモデルを定義
-# class Unet(nn.Module):
-#     def __init__(self):
-#         super(Unet, self).__init__()
-#         # encoderの層
-#         self.conv1 = nn.Sequential(
-#             nn.Conv2d(1, 16, 4, stride=2, padding=1), # ２次元データの畳み込み演算を行う層　引数は入力のチャンネル数、出力のチャンネル数、カーネル(フィルタ)の大きさ
-#             nn.BatchNorm2d(16), # batch normalizationを行う層　引数は入力データのチャンネル数
-#             nn.LeakyReLU(0.2, inplace=True) # inplace=Trueにすることで、使用メモリを削減
-#         )
-#         self.conv2 = nn.Sequential(
-#             nn.Conv2d(16, 32, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(32),
-#             nn.LeakyReLU(0.2, inplace=True)
-#         )
-#         self.conv3 = nn.Sequential(
-#             nn.Conv2d(32, 64, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(64),
-#             nn.LeakyReLU(0.2, inplace=True)
-#         )
-#         self.conv4 = nn.Sequential(
-#             nn.Conv2d(64, 128, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(128),
-#             nn.LeakyReLU(0.2, inplace=True)
-#         )
-#         self.conv5 = nn.Sequential(
-#             nn.Conv2d(128, 256, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(256),
-#             nn.LeakyReLU(0.2, inplace=True)
-#         )
-#         self.conv6 = nn.Sequential(
-#             nn.Conv2d(256, 512, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(512),
-#             nn.LeakyReLU(0.2, inplace=True)
-#         )
-#
-#         # decoderの層
-#         self.deconv1 = nn.Sequential(
-#             nn.ConvTranspose2d(512, 256, 4, stride=2, padding=1), # ２次元データの畳み込み演算を行う層　引数は入力のチャンネル数、出力のチャンネル数、カーネル(フィルタ)の大きさ
-#             nn.BatchNorm2d(256), # batch normalizationを行う層　引数は入力データのチャンネル数
-#             nn.Dropout2d(p=0.5), # 50%の割合でドロップアウトを実行
-#             nn.ReLU(inplace=True) # inplace=Trueにすることで、使用メモリを削減
-#         )
-#         self.deconv2 = nn.Sequential(
-#             nn.ConvTranspose2d(512, 128, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(128),
-#             nn.Dropout2d(p=0.5),
-#             nn.ReLU(inplace=True)
-#         )
-#         self.deconv3 = nn.Sequential(
-#             nn.ConvTranspose2d(256, 64, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(64),
-#             nn.Dropout2d(p=0.5),
-#             nn.ReLU(inplace=True)
-#         )
-#         self.deconv4 = nn.Sequential(
-#             nn.ConvTranspose2d(128, 32, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(32),
-#             nn.ReLU(inplace=True)
-#         )
-#         self.deconv5 = nn.Sequential(
-#             nn.ConvTranspose2d(64, 16, 4, stride=2, padding=1),
-#             nn.BatchNorm2d(16),
-#             nn.ReLU(inplace=True)
-#         )
-#         self.deconv6 = nn.Sequential(
-#             nn.ConvTranspose2d(32, 1, 4, stride=2, padding=1),
-#             nn.Sigmoid()
-#         )
-#
-#
-#     def forward(self, x):
-#         # x = torch.randn(64, 1, 512, 128) # (batch_size, num_channels, height, width)
-#         # encoder forward
-#         h1 = self.conv1(x)
-#         h2 = self.conv2(h1)
-#         h3 = self.conv3(h2)
-#         h4 = self.conv4(h3)
-#         h5 = self.conv5(h4)
-#         h6 = self.conv6(h5)
-#         # decoder forward
-#         dh1 = self.deconv1(h6)
-#         dh2 = self.deconv2(torch.cat((dh1, h5), dim=1))
-#         dh3 = self.deconv3(torch.cat((dh2, h4), dim=1))
-#         dh4 = self.deconv4(torch.cat((dh3, h3), dim=1))
-#         dh5 = self.deconv5(torch.cat((dh4, h2), dim=1))
-#         dh6 = self.deconv6(torch.cat((dh5, h1), dim=1))
-#         return dh6
+# Unetのモデルを定義
+class Unet(nn.Module):
+    def __init__(self):
+        super(Unet, self).__init__()
+        # encoderの層
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(1, 16, 4, stride=2, padding=1), # ２次元データの畳み込み演算を行う層　引数は入力のチャンネル数、出力のチャンネル数、カーネル(フィルタ)の大きさ
+            nn.BatchNorm2d(16), # batch normalizationを行う層　引数は入力データのチャンネル数
+            nn.LeakyReLU(0.2, inplace=True) # inplace=Trueにすることで、使用メモリを削減
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(16, 32, 4, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(32, 64, 4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(64, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv5 = nn.Sequential(
+            nn.Conv2d(128, 256, 4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv6 = nn.Sequential(
+            nn.Conv2d(256, 512, 4, stride=2, padding=1),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+
+        # decoderの層
+        self.deconv1 = nn.Sequential(
+            nn.ConvTranspose2d(512, 256, 4, stride=2, padding=1), # ２次元データの畳み込み演算を行う層　引数は入力のチャンネル数、出力のチャンネル数、カーネル(フィルタ)の大きさ
+            nn.BatchNorm2d(256), # batch normalizationを行う層　引数は入力データのチャンネル数
+            nn.Dropout2d(p=0.5), # 50%の割合でドロップアウトを実行
+            nn.ReLU(inplace=True) # inplace=Trueにすることで、使用メモリを削減
+        )
+        self.deconv2 = nn.Sequential(
+            nn.ConvTranspose2d(512, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.Dropout2d(p=0.5),
+            nn.ReLU(inplace=True)
+        )
+        self.deconv3 = nn.Sequential(
+            nn.ConvTranspose2d(256, 64, 4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.Dropout2d(p=0.5),
+            nn.ReLU(inplace=True)
+        )
+        self.deconv4 = nn.Sequential(
+            nn.ConvTranspose2d(128, 32, 4, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True)
+        )
+        self.deconv5 = nn.Sequential(
+            nn.ConvTranspose2d(64, 16, 4, stride=2, padding=1),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True)
+        )
+        self.deconv6 = nn.Sequential(
+            nn.ConvTranspose2d(32, 1, 4, stride=2, padding=1),
+            nn.Sigmoid()
+        )
+
+
+    def forward(self, x):
+        # x = torch.randn(64, 1, 512, 128) # (batch_size, num_channels, height, width)
+        # encoder forward
+        h1 = self.conv1(x)
+        h2 = self.conv2(h1)
+        h3 = self.conv3(h2)
+        h4 = self.conv4(h3)
+        h5 = self.conv5(h4)
+        h6 = self.conv6(h5)
+        # decoder forward
+        dh1 = self.deconv1(h6)
+        dh2 = self.deconv2(torch.cat((dh1, h5), dim=1))
+        dh3 = self.deconv3(torch.cat((dh2, h4), dim=1))
+        dh4 = self.deconv4(torch.cat((dh3, h3), dim=1))
+        dh5 = self.deconv5(torch.cat((dh4, h2), dim=1))
+        dh6 = self.deconv6(torch.cat((dh5, h1), dim=1))
+        return dh6
 
 # trainデータとvalidationデータのファイルパスリストを取得
 def mk_datapath_list(dataset_dir):
@@ -322,7 +315,7 @@ if __name__ == '__main__':
     spec_freq_dim = 512 # スペクトログラムの周波数次元数
     spec_frame_num = 64 # スペクトログラムのフレーム数 spec_freq_dim=512のとき、音声の長さが5秒の場合は128, 3秒の場合は64
     # モデルを作成
-    model = Unet_kernel3()
+    model = Unet()
     # データセットを作成
     dataset_dir = "./data/voice100_noise100_3sec/"
     train_mixed_spec_list, train_target_spec_list, val_mixed_spec_list, val_target_spec_list = mk_datapath_list(dataset_dir)
